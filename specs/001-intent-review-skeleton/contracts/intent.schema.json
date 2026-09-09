@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zintent.local/schemas/intent-revision-1.0.0.json",
+  "title": "zintent Intent Revision 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "revision_id",
+    "revision_hash",
+    "hash_algorithm",
+    "canonicalization",
+    "parent_revision_id",
+    "operation_id",
+    "actor",
+    "operation",
+    "created_at",
+    "revision_payload"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "revision_id": {"type": "string", "format": "uuid"},
+    "revision_hash": {"$ref": "#/$defs/hash"},
+    "hash_algorithm": {"const": "sha-256"},
+    "canonicalization": {"const": "jcs-rfc8785"},
+    "parent_revision_id": {
+      "oneOf": [{"type": "string", "format": "uuid"}, {"type": "null"}]
+    },
+    "operation_id": {"type": "string", "format": "uuid"},
+    "actor": {"$ref": "#/$defs/actor"},
+    "operation": {"$ref": "#/$defs/operation"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "revision_payload": {"$ref": "#/$defs/payload"}
+  },
+  "$defs": {
+    "hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actor_type", "actor_id", "identity_source", "authenticated"],
+      "properties": {
+        "actor_type": {"enum": ["human", "ai", "system"]},
+        "actor_id": {"type": "string", "minLength": 1},
+        "identity_source": {"enum": ["os_user", "explicit_fallback"]},
+        "authenticated": {"const": false}
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actor", "operation_id", "operation_type", "revision_id"],
+      "properties": {
+        "actor": {"$ref": "#/$defs/actor"},
+        "operation_id": {"type": "string", "format": "uuid"},
+        "operation_type": {"type": "string", "minLength": 1},
+        "revision_id": {"type": "string", "format": "uuid"},
+        "source_reference_ids": {
+          "type": "array",
+          "items": {"type": "string", "format": "uuid"},
+          "uniqueItems": true
+        }
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "item_id",
+        "kind",
+        "statement",
+        "provenance",
+        "resolution_status",
+        "review_status",
+        "included_in_approval",
+        "source_reference_ids",
+        "supersedes",
+        "superseded_by"
+      ],
+      "properties": {
+        "item_id": {"type": "string", "format": "uuid"},
+        "kind": {"type": "string", "minLength": 1},
+        "statement": {"type": "string"},
+        "provenance": {"$ref": "#/$defs/provenance"},
+        "resolution_status": {"enum": ["determined", "unresolved"]},
+        "review_status": {"enum": ["unreviewed", "accepted", "edited", "rejected"]},
+        "included_in_approval": {"type": "boolean"},
+        "rationale": {"type": ["string", "null"]},
+        "source_reference_ids": {
+          "type": "array",
+          "items": {"type": "string", "format": "uuid"},
+          "uniqueItems": true
+        },
+        "supersedes": {
+          "type": "array",
+          "items": {"type": "string", "format": "uuid"},
+          "uniqueItems": true
+        },
+        "superseded_by": {
+          "type": "array",
+          "items": {"type": "string", "format": "uuid"},
+          "uniqueItems": true
+        }
+      }
+    },
+    "comment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "comment_id",
+        "target_item_id",
+        "body",
+        "author",
+        "status",
+        "created_revision_id"
+      ],
+      "properties": {
+        "comment_id": {"type": "string", "format": "uuid"},
+        "target_item_id": {"type": "string", "format": "uuid"},
+        "body": {"type": "string", "minLength": 1},
+        "author": {"$ref": "#/$defs/actor"},
+        "status": {"enum": ["open", "resolved", "withdrawn"]},
+        "created_revision_id": {"type": "string", "format": "uuid"},
+        "closed_revision_id": {
+          "oneOf": [{"type": "string", "format": "uuid"}, {"type": "null"}]
+        },
+        "closure_reason": {"type": ["string", "null"]},
+        "resolution_revision_id": {
+          "oneOf": [{"type": "string", "format": "uuid"}, {"type": "null"}]
+        }
+      }
+    },
+    "operation": {
+      "type": "object",
+      "required": ["type", "target_ids"],
+      "properties": {
+        "type": {
+          "enum": [
+            "start_review",
+            "accept_item",
+            "edit_item",
+            "reject_item",
+            "add_comment",
+            "resolve_comment",
+            "withdraw_comment",
+            "complete_review",
+            "approve_intent",
+            "reopen_after_approval"
+          ]
+        },
+        "target_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "content": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "intent_id",
+        "lifecycle_state",
+        "source_references",
+        "items",
+        "comments",
+        "approval_refs"
+      ],
+      "properties": {
+        "intent_id": {"type": "string", "format": "uuid"},
+        "lifecycle_state": {
+          "enum": ["draft", "in_review", "review_complete", "approved"]
+        },
+        "source_references": {"type": "array", "items": {"type": "object"}},
+        "items": {"type": "array", "items": {"$ref": "#/$defs/item"}},
+        "comments": {"type": "array", "items": {"$ref": "#/$defs/comment"}},
+        "approval_refs": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

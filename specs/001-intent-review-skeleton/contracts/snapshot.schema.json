@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zintent.local/schemas/approved-snapshot-1.0.0.json",
+  "title": "zintent Approved Intent Snapshot 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "snapshot_id",
+    "hash_algorithm",
+    "canonicalization",
+    "approved_content",
+    "approval"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "snapshot_id": {"type": "string", "pattern": "^sha256-[0-9a-f]{64}$"},
+    "hash_algorithm": {"const": "sha-256"},
+    "canonicalization": {"const": "jcs-rfc8785"},
+    "approved_content": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["intent_id", "schema_version", "items", "source_references"],
+      "properties": {
+        "intent_id": {"type": "string", "format": "uuid"},
+        "schema_version": {"type": "string", "minLength": 1},
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["item_id", "kind", "statement", "provenance"],
+            "properties": {
+              "item_id": {"type": "string", "format": "uuid"},
+              "kind": {"type": "string", "minLength": 1},
+              "statement": {"type": "string", "minLength": 1},
+              "rationale": {"type": ["string", "null"]},
+              "provenance": {"type": "object"}
+            }
+          }
+        },
+        "source_references": {"type": "array", "items": {"type": "object"}}
+      }
+    },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approval_id",
+        "approved_revision_id",
+        "approved_revision_hash",
+        "approved_content_hash",
+        "approving_actor",
+        "approved_at",
+        "validation_result"
+      ],
+      "properties": {
+        "approval_id": {"type": "string", "format": "uuid"},
+        "approved_revision_id": {"type": "string", "format": "uuid"},
+        "approved_revision_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "approved_content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "approving_actor": {
+          "type": "object",
+          "required": ["actor_type", "actor_id", "identity_source", "authenticated"],
+          "properties": {
+            "actor_type": {"const": "human"},
+            "actor_id": {"type": "string", "minLength": 1},
+            "identity_source": {"enum": ["os_user", "explicit_fallback"]},
+            "authenticated": {"const": false}
+          },
+          "additionalProperties": false
+        },
+        "approved_at": {"type": "string", "format": "date-time"},
+        "validation_result": {
+          "type": "object",
+          "required": ["eligible", "blocking_findings"],
+          "properties": {
+            "eligible": {"const": true},
+            "blocking_findings": {"type": "array", "maxItems": 0}
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  }
+}

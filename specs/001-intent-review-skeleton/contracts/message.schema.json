@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zintent.local/schemas/protocol-message-1.0.json",
+  "title": "zintent Core Protocol Message 1.0",
+  "oneOf": [
+    {"$ref": "#/$defs/request"},
+    {"$ref": "#/$defs/success"},
+    {"$ref": "#/$defs/failure"}
+  ],
+  "$defs": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol_version", "request_id", "operation", "payload_schema", "payload"],
+      "properties": {
+        "protocol_version": {"const": "1.0"},
+        "request_id": {"type": "string", "format": "uuid"},
+        "operation": {
+          "enum": [
+            "protocol_info",
+            "show_intent",
+            "validate_intent",
+            "diff_revisions",
+            "start_review",
+            "accept_item",
+            "edit_item",
+            "reject_item",
+            "add_comment",
+            "resolve_comment",
+            "withdraw_comment",
+            "complete_review",
+            "approve_intent"
+          ]
+        },
+        "payload_schema": {"type": "string", "pattern": "^zintent\\.[a-z0-9-]+/[1-9][0-9]*$"},
+        "payload": {"type": "object"}
+      }
+    },
+    "success": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol_version", "request_id", "ok", "result_schema", "result"],
+      "properties": {
+        "protocol_version": {"const": "1.0"},
+        "request_id": {"type": "string", "format": "uuid"},
+        "ok": {"const": true},
+        "result_schema": {"type": "string", "pattern": "^zintent\\.[a-z0-9-]+/[1-9][0-9]*$"},
+        "result": {"type": "object"}
+      }
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol_version", "request_id", "ok", "error"],
+      "properties": {
+        "protocol_version": {"const": "1.0"},
+        "request_id": {"type": "string", "format": "uuid"},
+        "ok": {"const": false},
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "message", "retryable"],
+          "properties": {
+            "code": {"type": "string", "minLength": 1},
+            "message": {"type": "string", "minLength": 1},
+            "retryable": {"type": "boolean"},
+            "details": {"type": "array", "items": {"type": "object"}}
+          }
+        }
+      }
+    }
+  }
+}
