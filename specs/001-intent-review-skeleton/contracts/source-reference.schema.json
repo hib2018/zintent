@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zintent.local/schemas/source-reference-1.0.0.json",
+  "title": "zintent Source Reference 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source_reference_id", "kind", "locator"],
+  "properties": {
+    "source_reference_id": {"type": "string", "format": "uuid"},
+    "kind": {"enum": ["user_input", "file", "uri", "fixture"]},
+    "locator": {"type": "string", "minLength": 1},
+    "content_hash": {
+      "oneOf": [
+        {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        {"type": "null"}
+      ]
+    },
+    "excerpt": {"type": ["string", "null"]}
+  }
+}

@@ -39,11 +39,12 @@ In the Hunk-style TUI:
 1. Confirm the header shows the local OS actor as unauthenticated.
 2. Navigate with arrows or `j/k`.
 3. Accept one item with `a`.
-4. Edit one item with `e`; inspect the before/after hunk before confirming.
+4. Edit one item with `e`; inspect the core-issued before/after hunk before confirming the exact
+   one-use preview.
 5. Add a comment with `c`, then resolve it with `r` and a reason.
 6. Reject one item with `x` and provide a rationale.
 7. Press `f` to complete review.
-8. Press `p`, verify the exact revision/hash, and provide a fresh confirmation.
+8. Press `p`, verify the exact revision/hash and fresh challenge, and type the requested response.
 9. Quit with `q`.
 
 Expected: every confirmed operation is immediately persisted as a new revision. Quitting needs no
@@ -78,15 +79,19 @@ zig-out/bin/zintent item accept tests/fixtures/valid-draft ITEM_ID \
 
 Expected: exit status 4, error code `stale_revision`, and no reachable revision is created.
 
-For a fixture with an open comment:
+For a fixture with an open comment, run the interactive command from a TTY:
 
 ```sh
 zig-out/bin/zintent approve tests/fixtures/open-comment \
-  --revision CURRENT_REV --confirm CURRENT_REV --operation-id OPERATION_ID --output json
+  --revision CURRENT_REV --operation-id OPERATION_ID --output json
 ```
 
 Expected: exit status 5, error code `approval_ineligible`, a finding identifying the open comment,
 and no snapshot.
+
+Pipe or redirect the same approval command so it has no TTY. Expected: exit status 5, error code
+`tty_required`, and no confirmation capability, approved revision, or snapshot. No command-line
+flag or stdin payload can replace the interactive challenge response.
 
 Attempt snapshot mutation through every exposed command. Expected: no update command exists,
 snapshot input is rejected, and original bytes and hash remain unchanged.

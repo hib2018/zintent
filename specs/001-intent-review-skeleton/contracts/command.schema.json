@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zintent.local/schemas/command-1.0.0.json",
+  "title": "zintent Core Command Payload 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["operation"],
+  "properties": {
+    "operation": {
+      "enum": [
+        "protocol_info",
+        "show_intent",
+        "validate_intent",
+        "diff_revisions",
+        "start_review",
+        "accept_item",
+        "preview_edit",
+        "edit_item",
+        "reject_item",
+        "add_comment",
+        "resolve_comment",
+        "withdraw_comment",
+        "complete_review",
+        "prepare_approval",
+        "approve_intent"
+      ]
+    },
+    "intent_path": {"type": "string", "minLength": 1},
+    "expected_revision_id": {"type": "string", "format": "uuid"},
+    "operation_id": {"type": "string", "format": "uuid"},
+    "actor": {"$ref": "provenance.schema.json#/$defs/humanActor"},
+    "item_id": {"type": "string", "format": "uuid"},
+    "comment_id": {"type": "string", "format": "uuid"},
+    "statement": {"type": "string", "minLength": 1},
+    "rationale": {"type": "string", "minLength": 1},
+    "resolution_revision_id": {
+      "oneOf": [{"type": "string", "format": "uuid"}, {"type": "null"}]
+    },
+    "from_revision_id": {"type": "string", "format": "uuid"},
+    "to_revision_id": {"type": "string", "format": "uuid"},
+    "preview_token": {"type": "string", "minLength": 1},
+    "confirmation_token": {"type": "string", "minLength": 1},
+    "challenge_response": {"type": "string", "minLength": 6},
+    "interactive_tty": {"type": "boolean"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"operation": {"const": "protocol_info"}}},
+      "then": {"maxProperties": 1}
+    },
+    {
+      "if": {"properties": {"operation": {"enum": ["show_intent", "validate_intent"]}}},
+      "then": {"required": ["intent_path"]}
+    },
+    {
+      "if": {"properties": {"operation": {"const": "diff_revisions"}}},
+      "then": {"required": ["intent_path"]}
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "enum": [
+              "start_review",
+              "accept_item",
+              "edit_item",
+              "reject_item",
+              "add_comment",
+              "resolve_comment",
+              "withdraw_comment",
+              "complete_review",
+              "approve_intent"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": ["intent_path", "expected_revision_id", "operation_id", "actor"]
+      }
+    },
+    {
+      "if": {"properties": {"operation": {"enum": ["accept_item", "reject_item", "add_comment"]}}},
+      "then": {"required": ["item_id"]}
+    },
+    {
+      "if": {"properties": {"operation": {"enum": ["preview_edit", "edit_item"]}}},
+      "then": {"required": ["intent_path", "expected_revision_id", "actor", "item_id", "statement"]}
+    },
+    {
+      "if": {"properties": {"operation": {"const": "edit_item"}}},
+      "then": {"required": ["operation_id", "preview_token"]}
+    },
+    {
+      "if": {"properties": {"operation": {"const": "reject_item"}}},
+      "then": {"required": ["rationale"]}
+    },
+    {
+      "if": {"properties": {"operation": {"enum": ["resolve_comment", "withdraw_comment"]}}},
+      "then": {"required": ["comment_id", "rationale"]}
+    },
+    {
+      "if": {"properties": {"operation": {"const": "prepare_approval"}}},
+      "then": {
+        "required": ["intent_path", "expected_revision_id", "actor", "interactive_tty"],
+        "properties": {"interactive_tty": {"const": true}}
+      }
+    },
+    {
+      "if": {"properties": {"operation": {"const": "approve_intent"}}},
+      "then": {
+        "required": [
+          "confirmation_token",
+          "challenge_response",
+          "interactive_tty"
+        ],
+        "properties": {"interactive_tty": {"const": true}}
+      }
+    }
+  ]
+}

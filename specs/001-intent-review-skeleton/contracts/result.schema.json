@@ -19,7 +19,7 @@
       "uniqueItems": true
     },
     "findings": {"type": "array", "items": {"$ref": "#/$defs/finding"}},
-    "data": {"type": "object"},
+    "data": {"$ref": "#/$defs/resultData"},
     "error": {"$ref": "#/$defs/error"}
   },
   "allOf": [
@@ -33,6 +33,47 @@
     }
   ],
   "$defs": {
+    "resultData": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "intent": {"$ref": "intent.schema.json"},
+        "head": {"$ref": "head.schema.json"},
+        "edit_preview": {"$ref": "edit-preview.schema.json"},
+        "approval_confirmation": {"$ref": "approval-confirmation.schema.json"},
+        "snapshot": {"$ref": "snapshot.schema.json"},
+        "snapshot_path": {"type": "string", "minLength": 1},
+        "diff": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["record_type", "record_id", "change_type", "before", "after"],
+            "properties": {
+              "record_type": {"enum": ["intent", "item", "comment", "approval"]},
+              "record_id": {"type": "string", "minLength": 1},
+              "change_type": {"enum": ["added", "modified", "removed"]},
+              "before": {},
+              "after": {}
+            }
+          }
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["stream_bytes", "deadline_seconds"],
+          "properties": {
+            "stream_bytes": {"const": 16777216},
+            "deadline_seconds": {"const": 10}
+          }
+        }
+      }
+    },
     "finding": {
       "type": "object",
       "additionalProperties": false,

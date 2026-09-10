@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zintent.local/schemas/head-1.0.0.json",
+  "title": "zintent HEAD Manifest 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "intent_id",
+    "current_revision_id",
+    "current_revision_hash",
+    "lifecycle_state",
+    "approved_snapshot_ref"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "intent_id": {"type": "string", "format": "uuid"},
+    "current_revision_id": {"type": "string", "format": "uuid"},
+    "current_revision_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "lifecycle_state": {"enum": ["draft", "in_review", "review_complete", "approved"]},
+    "approved_snapshot_ref": {"type": ["string", "null"]}
+  }
+}

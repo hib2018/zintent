@@ -31,8 +31,8 @@ reject items before any approval occurs.
 must prove. Without it, zintent does not provide meaningful control over interpretation.
 
 **Independent Test**: Load a valid Draft containing several items, perform each available review
-action on a different item, close and reopen the review, and verify that every action and resulting
-item status is preserved.
+action on a different item, close and reopen the review from HEAD, and verify that every action and
+resulting item and comment status is preserved. Advanced history inspection is not required.
 
 **Acceptance Scenarios**:
 
@@ -42,8 +42,9 @@ item status is preserved.
 2. **Given** an unreviewed item, **When** the reviewer accepts it, **Then** the item is recorded as
    accepted by the human reviewer in a new revision.
 3. **Given** an unreviewed or accepted item, **When** the reviewer edits its statement, **Then** the
-   human-authored text is stored in a new revision with human provenance and the prior value remains
-   available for comparison.
+   proposed before/after diff is shown and the reviewer confirms that exact preview, and the
+   human-authored text is stored in a new revision with human provenance while the prior value
+   remains available for comparison.
 4. **Given** an item requiring follow-up, **When** the reviewer adds a comment, **Then** the comment
    receives a stable identity, remains open, references that item, and blocks final approval.
 5. **Given** an open comment, **When** the reviewer explicitly resolves or withdraws it with a
@@ -72,8 +73,9 @@ revision and cannot be altered.
 1. **Given** an Intent with an open comment, invalid data, or an unreviewed active item, **When**
    approval eligibility is checked, **Then** approval is denied with findings that identify every
    blocking record.
-2. **Given** an eligible reviewed Intent, **When** the human confirms final approval, **Then** an
-   Approved Intent Snapshot is issued for the exact current revision.
+2. **Given** an eligible reviewed Intent, **When** the human confirms a short-lived challenge in an
+   interactive terminal, **Then** a new approved revision and its Approved Intent Snapshot are
+   issued from the exact confirmed review-complete revision.
 3. **Given** an Approved Intent Snapshot, **When** it is inspected, **Then** it records the content
    hash, approving actor, approval time, and validation result.
 4. **Given** an approved Intent, **When** a subsequent change is made to the working Intent,
@@ -140,7 +142,7 @@ continue without reconstructing prior context.
   source reference, resolution status, and current review status.
 - **FR-004**: A human reviewer MUST be able to accept, edit, comment on, or reject an individual
   Intent Item.
-- **FR-005**: Every state-changing review action MUST create a new revision and mechanically record
+- **FR-005**: Every governed state-changing operation MUST create a new revision and mechanically record
   its actor type, operation type, affected record, and prior revision.
 - **FR-021**: For human operations, the system MUST automatically use the operating environment's
   current user name as the actor ID. It MUST label the identity as locally sourced and not
@@ -155,20 +157,26 @@ continue without reconstructing prior context.
   author type and creation revision, and have an explicit open, resolved, or withdrawn status.
   Only a human reviewer may resolve or withdraw a comment; the operation MUST record a reason and
   MAY reference the revision that addressed it.
-- **FR-009**: The system MUST show a comparison between any proposed current change and its
-  immediately preceding revision before the reviewer confirms the change.
+- **FR-009**: Every interface MUST obtain a core-issued edit preview containing the before/after
+  comparison and a short-lived, one-use preview token before applying an item edit. The token MUST
+  bind the Intent, expected revision, item, actor, and proposed statement; applying an edit with a
+  missing, expired, used, or mismatched token MUST be refused.
 - **FR-010**: The system MUST validate artifact structure, identity uniqueness, allowed state
   transitions, required fields, and referential integrity before persisting a state change.
 - **FR-011**: Approval eligibility MUST require at least one non-rejected item, every non-rejected
   item reviewed and accepted or human-edited, no open comments including comments on rejected
   items, a valid current revision, and complete provenance.
-- **FR-012**: Approval MUST require an explicit human confirmation naming the current revision;
-  neither a skill nor another automated actor may provide that confirmation.
-- **FR-013**: Successful approval MUST issue an immutable Approved Intent Snapshot containing the
-  exact approved content, approved revision, content hash, approving actor, approval time, and
-  validation result.
-- **FR-014**: Any change after approval MUST occur in a new working revision, preserve every
-  previously issued snapshot, and remove approved status from the working Intent until reapproval.
+- **FR-012**: Approval MUST use a two-step core-governed flow. The core MUST first prepare the exact
+  eligible revision, hashes, blockers, and a short-lived one-use confirmation challenge. The final
+  approval MUST require a fresh response from a human through an interactive TTY. Non-TTY approval,
+  and confirmation supplied by a skill or automated actor, MUST be refused.
+- **FR-013**: Successful approval MUST create a new `approved` revision whose parent is the exact
+  human-confirmed `review_complete` revision and whose Intent content is unchanged. The immutable
+  Approved Intent Snapshot MUST record both revision IDs, the content hash, confirmation token ID,
+  approving actor, approval time, and validation result.
+- **FR-014**: Any normal edit, comment, or review operation after approval MUST create a new working
+  revision in `in_review`, preserve every issued snapshot, and invalidate working approval without
+  requiring a separate reopen operation.
 - **FR-015**: The system MUST refuse direct modification of an Approved Intent Snapshot.
 - **FR-016**: Review and approval operations MUST return a structured result that identifies
   success or failure, the resulting revision, affected record IDs, and actionable validation
@@ -180,16 +188,17 @@ continue without reconstructing prior context.
   withdrawal, reject, and approval confirmation; it MUST record actions through governed
   operations and summarize remaining blockers on exit.
 - **FR-019**: The minimum zintent-approve process MUST check approval eligibility, present blockers
-  or the exact eligible revision, require human confirmation, and return the issued snapshot.
+  or the exact eligible revision, open the interactive confirmation step, and return the issued
+  snapshot. The skill MUST NOT accept or synthesize the confirmation response itself.
 - **FR-020**: Review actions performed through any interface included in this feature MUST use the
   same validation, transition, provenance, and revision rules.
 - **FR-022**: Intent Documents MUST use the explicit lifecycle states `draft`, `in_review`,
   `review_complete`, and `approved`. Starting review moves `draft` to `in_review`. An explicit
   review-completion operation moves `in_review` to `review_complete` only after all non-rejected
   items are accepted or human-edited and no comments remain open. Approval moves only an eligible
-  `review_complete` revision to `approved`. Any permitted content or review change from
-  `review_complete` or `approved` creates a new working revision in `in_review`; an issued snapshot
-  never changes state.
+  `review_complete` revision to a new `approved` child revision after human confirmation. Any
+  permitted content or review change from `review_complete` or `approved` creates a new working
+  revision in `in_review`; an issued snapshot never changes state.
 
 ### Scope Boundaries
 
@@ -217,8 +226,8 @@ continue without reconstructing prior context.
 - **Revision**: An immutable record of one or more governed changes, including its revision
   identity, parent revision, actor type, operations, timestamp, and resulting content identity.
 - **Approval**: A record binding a human approving actor and validation result to one exact revision
-  and content hash. In this feature, the actor is the locally sourced operating-environment user
-  name and is not an authenticated identity.
+  lineage and content hash. It records the human-confirmed review-complete revision, resulting
+  approved revision, confirmation token ID, and locally sourced unauthenticated actor.
 - **Approved Intent Snapshot**: An immutable artifact containing the approved Intent content and its
   Approval record; it remains separate from later working revisions.
 
@@ -241,6 +250,10 @@ continue without reconstructing prior context.
 - **SC-007**: At least 9 of 10 representative first-time reviewers can complete the primary journey
   from opening a prepared Draft through producing an Approved Intent Snapshot without external
   assistance.
+- **SC-008**: A 1,000-record, 10 MiB Intent is validated and initially displayed within 1 second on
+  reference development hardware.
+- **SC-009**: A normal single-item review operation is durably persisted within 250 milliseconds on
+  reference development hardware, excluding human input time.
 
 ## Assumptions
 

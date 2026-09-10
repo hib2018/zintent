@@ -100,6 +100,27 @@ injection and quoting risk; direct JSON editing bypasses the core.
 [RFC 8259 JSON](https://www.rfc-editor.org/rfc/rfc8259),
 [JSON Schema 2020-12](https://json-schema.org/draft/2020-12).
 
+## Human Confirmation Capabilities
+
+**Decision**: Item edits and final approval use separate two-step, core-issued, short-lived,
+one-use capabilities. An edit capability binds the Intent, expected revision, item, actor, and
+before/after statement hashes. An approval capability binds the eligible review-complete revision,
+revision hash, approved-content hash, actor, and a fresh challenge. Approval preparation and
+consumption are available only when the Go frontend is attached to a TTY; the human types the
+challenge response during that same interaction. The core stores capability records in a transient
+registry outside revisions and snapshots, consumes them atomically under the Intent lock, and may
+delete expired records without changing HEAD. They are invalidated by expiry, use, actor mismatch,
+payload mismatch, or stale revision.
+
+**Rationale**: A `--confirm` flag or direct mutation request proves only that a caller copied data;
+an Agent skill could do that without human involvement. Binding a fresh TTY response to the exact
+reviewed content preserves human authority. The same capability pattern gives CLI and TUI edits an
+enforceable preview-before-apply invariant.
+
+**Alternatives considered**: revision repetition on the command line, stdin-only confirmation, and
+frontend-generated tokens were rejected because automation could synthesize them or because they
+move an invariant outside the Zig trust boundary.
+
 ## Minimal Hunk-Style TUI
 
 **Decision**: Implement the Go TUI with Bubble Tea v2 as a pure presentation reducer around the

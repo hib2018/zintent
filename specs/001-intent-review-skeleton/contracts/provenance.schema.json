@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zintent.local/schemas/provenance-1.0.0.json",
+  "title": "zintent Provenance 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["content_origin", "operation_id", "operation_type", "revision_id", "source_reference_ids"],
+  "properties": {
+    "content_origin": {"enum": ["source", "human", "ai", "system"]},
+    "operation_actor": {
+      "oneOf": [
+        {"$ref": "#/$defs/humanActor"},
+        {"type": "null"}
+      ]
+    },
+    "operation_id": {"type": "string", "format": "uuid"},
+    "operation_type": {"type": "string", "minLength": 1},
+    "revision_id": {"type": "string", "format": "uuid"},
+    "source_reference_ids": {
+      "type": "array",
+      "items": {"type": "string", "format": "uuid"},
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "humanActor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actor_type", "actor_id", "identity_source", "authenticated"],
+      "properties": {
+        "actor_type": {"const": "human"},
+        "actor_id": {"type": "string", "minLength": 1},
+        "identity_source": {"enum": ["os_user", "explicit_fallback"]},
+        "authenticated": {"const": false}
+      }
+    }
+  }
+}

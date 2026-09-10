@@ -20,7 +20,8 @@ orchestrate the Go tool without directly editing artifacts.
 Gloss v2 modules; Go standard library for subprocess, JSON, filesystem, and CLI handling
 
 **Storage**: Local JSON artifact directory with mutable HEAD manifest, immutable full revisions,
-and content-addressed approved snapshots; RFC 8785 canonicalization and SHA-256 identities
+content-addressed approved snapshots, and a core-owned transient confirmation-capability registry;
+RFC 8785 canonicalization and SHA-256 identities
 
 **Testing**: `zig build test`, `go test ./...`, cross-language protocol fixtures, transition tables,
 JSON Schema/golden hash contracts, fault-injected persistence tests, and Bubble Tea reducer tests
@@ -38,7 +39,9 @@ input; maintain responsive navigation without visible input backlog
 **Constraints**: Offline-capable; no service or database; one request/response per core process;
 16 MiB maximum protocol request, response, and captured stderr; 10-second core deadline; atomic
 visibility of mutations; immutable revisions/snapshots; no shell evaluation or direct artifact
-mutation; single active TUI per Intent with stale-revision rejection across processes
+mutation; single active TUI per Intent with stale-revision rejection across processes; edit uses a
+one-use core preview capability; approval requires a core-prepared one-use challenge answered by a
+human in the same interactive TTY and refuses non-TTY confirmation
 
 **Scale/Scope**: One local human reviewer; one active TUI per Intent; up to 1,000 active/historical
 items and comments and 10 MiB per revision; fixture or manually authored Draft input only
@@ -52,7 +55,7 @@ items and comments and 10 MiB per revision; fixture or manually authored Draft i
 | Skill-centered process | `zintent-review` and `zintent-approve` are use-case skills; atomic actions remain executable commands | PASS |
 | Skills orchestrate; tools enforce | Zig core exclusively owns validation, transitions, provenance, hashing, and persistence | PASS |
 | Artifact process contracts | Versioned schemas, immutable revisions, result envelopes, and resumable HEAD are specified in `contracts/` | PASS |
-| Human authority | Approval requires OS-derived human actor and fresh confirmation of the exact revision | PASS |
+| Human authority | Approval uses a core-bound short-lived challenge answered directly by the OS-derived human actor in a TTY; skills cannot submit it | PASS |
 | Interface semantic parity | Go CLI and TUI send the same versioned operations to the Zig core and consume one result model | PASS |
 | Adapter isolation | No planner integration is included; later adapters consume only approved snapshots | PASS |
 | Thin orchestration | Skills call commands and report outcomes; they do not own state or duplicate transitions | PASS |
@@ -74,10 +77,16 @@ specs/001-intent-review-skeleton/
 ├── quickstart.md
 ├── contracts/
 │   ├── protocol.md
+│   ├── command.schema.json
+│   ├── head.schema.json
 │   ├── message.schema.json
 │   ├── cli.md
 │   ├── intent.schema.json
+│   ├── provenance.schema.json
 │   ├── result.schema.json
+│   ├── source-reference.schema.json
+│   ├── edit-preview.schema.json
+│   ├── approval-confirmation.schema.json
 │   └── snapshot.schema.json
 └── tasks.md
 ```
@@ -95,13 +104,19 @@ core/
 │   ├── command.zig
 │   ├── transition.zig
 │   ├── validation.zig
+│   ├── diff.zig
 │   ├── hashing.zig
 │   └── store.zig
 └── tests/
     ├── contract.zig
+    ├── approval.zig
+    ├── diff.zig
     ├── transition.zig
     ├── hashing.zig
-    └── persistence_failure.zig
+    ├── model_validation.zig
+    ├── persistence_failure.zig
+    ├── protocol_fuzz.zig
+    └── recovery.zig
 
 tui/
 ├── go.mod
@@ -115,6 +130,7 @@ tui/
     └── output/
 
 .agents/skills/
+├── zintent-catalog.md
 ├── zintent-review/
 │   └── SKILL.md
 └── zintent-approve/
@@ -125,13 +141,19 @@ tests/
 │   ├── fixtures/
 │   └── compatibility_test.go
 ├── integration/
+│   ├── review_cli_test.go
 │   ├── review_journey_test.go
 │   ├── approval_safety_test.go
 │   ├── stale_revision_test.go
-│   └── crash_recovery_test.go
+│   ├── crash_recovery_test.go
+│   ├── audit_cli_test.go
+│   ├── performance_test.go
+│   ├── core_timeout_test.go
+│   └── platform_persistence_test.go
 └── fixtures/
     ├── valid-draft.json
-    └── invalid-drafts/
+    ├── invalid-drafts/
+    └── large/
 ```
 
 **Structure Decision**: Match zconfig's proven two-project boundary. `core/` is a non-interactive

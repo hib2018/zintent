@@ -39,26 +39,10 @@
       "additionalProperties": false,
       "required": ["actor_type", "actor_id", "identity_source", "authenticated"],
       "properties": {
-        "actor_type": {"enum": ["human", "ai", "system"]},
+        "actor_type": {"const": "human"},
         "actor_id": {"type": "string", "minLength": 1},
         "identity_source": {"enum": ["os_user", "explicit_fallback"]},
         "authenticated": {"const": false}
-      }
-    },
-    "provenance": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["actor", "operation_id", "operation_type", "revision_id"],
-      "properties": {
-        "actor": {"$ref": "#/$defs/actor"},
-        "operation_id": {"type": "string", "format": "uuid"},
-        "operation_type": {"type": "string", "minLength": 1},
-        "revision_id": {"type": "string", "format": "uuid"},
-        "source_reference_ids": {
-          "type": "array",
-          "items": {"type": "string", "format": "uuid"},
-          "uniqueItems": true
-        }
       }
     },
     "item": {
@@ -80,7 +64,7 @@
         "item_id": {"type": "string", "format": "uuid"},
         "kind": {"type": "string", "minLength": 1},
         "statement": {"type": "string"},
-        "provenance": {"$ref": "#/$defs/provenance"},
+        "provenance": {"$ref": "provenance.schema.json"},
         "resolution_status": {"enum": ["determined", "unresolved"]},
         "review_status": {"enum": ["unreviewed", "accepted", "edited", "rejected"]},
         "included_in_approval": {"type": "boolean"},
@@ -143,8 +127,7 @@
             "resolve_comment",
             "withdraw_comment",
             "complete_review",
-            "approve_intent",
-            "reopen_after_approval"
+            "approve_intent"
           ]
         },
         "target_ids": {
@@ -152,7 +135,7 @@
           "items": {"type": "string", "minLength": 1},
           "uniqueItems": true
         },
-        "content": {"type": "object"}
+        "content_digest": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
       },
       "additionalProperties": false
     },
@@ -172,7 +155,10 @@
         "lifecycle_state": {
           "enum": ["draft", "in_review", "review_complete", "approved"]
         },
-        "source_references": {"type": "array", "items": {"type": "object"}},
+        "source_references": {
+          "type": "array",
+          "items": {"$ref": "source-reference.schema.json"}
+        },
         "items": {"type": "array", "items": {"$ref": "#/$defs/item"}},
         "comments": {"type": "array", "items": {"$ref": "#/$defs/comment"}},
         "approval_refs": {

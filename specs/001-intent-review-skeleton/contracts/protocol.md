@@ -21,6 +21,11 @@ payload schema version evolve independently. Each message carries protocol_versi
 request_id, one operation, a named payload or result schema, and one object payload. A response
 request ID must exactly match its request.
 
+The envelope `operation` MUST equal `payload.operation`; disagreement is rejected before dispatch.
+Command payloads conform to [command.schema.json](command.schema.json), and successful results
+conform to [result.schema.json](result.schema.json). HEAD, source-reference, provenance, edit-preview,
+and approval-confirmation objects use their named strict schemas in this directory.
+
 Unknown major protocol or document schemas are rejected before an operation. Unknown fields are
 rejected in v1. Adding required fields, removing fields, or changing meaning requires a new major.
 
@@ -34,25 +39,38 @@ rejected in v1. Adding required fields, removing fields, or changing meaning req
 | diff_revisions | Compare two verified revisions | No |
 | start_review | Move a valid Draft into review | Yes |
 | accept_item | Accept one item | Yes |
-| edit_item | Replace one item statement after hunk confirmation | Yes |
+| preview_edit | Return an exact before/after hunk and one-use capability | No |
+| edit_item | Replace one item statement using the matching preview capability | Yes |
 | reject_item | Exclude one item with rationale | Yes |
 | add_comment | Add an open item comment | Yes |
 | resolve_comment | Resolve a comment with reason and optional revision | Yes |
 | withdraw_comment | Withdraw a comment with reason | Yes |
 | complete_review | Enter review_complete after gate checks | Yes |
-| approve_intent | Confirm and snapshot one exact eligible revision | Yes |
+| prepare_approval | Return blockers or an exact approval preview and TTY challenge | No |
+| approve_intent | Consume a matching human TTY response and issue approval | Yes |
 
 Every mutation payload includes intent location, expected revision ID, operation ID, and actor
 context. The core rechecks actor policy, locks the Intent, verifies current state, and returns a
 result conforming to [result.schema.json](result.schema.json). Go does not infer success from process
 exit alone.
 
+`preview_edit` binds its short-lived capability to Intent, expected revision, item, actor, and
+proposed statement. `prepare_approval` is requested only by a Go process attached to a TTY and binds
+its short-lived capability to the eligible review-complete revision, hashes, actor, and fresh
+challenge. `approve_intent` must carry that capability and the response entered during the same TTY
+interaction. Missing, expired, consumed, stale, or mismatched capabilities fail without mutation.
+Capability records live in a core-owned transient registry outside revisions and snapshots so the
+next one-shot invocation can consume them atomically. They are not artifacts or workflow state;
+expired records may be cleaned without changing HEAD. Only the consumed token ID is retained in an
+issued Approval audit record.
+
 ## Core Ownership
 
 Only Zig may allocate persistent IDs, validate artifacts, derive provenance, apply transitions,
 decide approval eligibility, canonicalize and hash content, acquire locks, or publish revisions,
 snapshots, and HEAD. Go owns arguments, actor discovery, deadlines, presentation, TUI state, and
-human confirmation. It may hold draft input in memory but cannot serialize an Intent mutation.
+human confirmation. It may hold draft input and short-lived capabilities for presentation, but it
+cannot serialize an Intent mutation or write the core capability registry.
 
 ## Retry and Failure
 

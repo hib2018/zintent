@@ -20,25 +20,35 @@
     zintent validate <intent> [--output human|json]
     zintent review <intent> [--actor-id <fallback>]
     zintent item accept <intent> <item-id> --expected-revision <rev> --operation-id <id>
-    zintent item edit <intent> <item-id> --statement-file <path|-> --expected-revision <rev> --operation-id <id>
+    zintent item edit-preview <intent> <item-id> --statement-file <path|-> --expected-revision <rev> [--output human|json]
+    zintent item edit <intent> <item-id> --statement-file <path|-> --expected-revision <rev> --preview-token <token> --operation-id <id>
     zintent item reject <intent> <item-id> --reason-file <path|-> --expected-revision <rev> --operation-id <id>
     zintent comment add <intent> <item-id> --body-file <path|-> --expected-revision <rev> --operation-id <id>
     zintent comment resolve <intent> <comment-id> --reason-file <path|-> [--resolution-revision <rev>] --expected-revision <rev> --operation-id <id>
     zintent comment withdraw <intent> <comment-id> --reason-file <path|-> --expected-revision <rev> --operation-id <id>
     zintent complete-review <intent> --expected-revision <rev> --operation-id <id>
     zintent diff <intent> [--from <rev>] [--to <rev>] [--output human|json]
-    zintent approve <intent> --revision <rev> --confirm <rev> --operation-id <id> [--output human|json]
+    zintent approve <intent> --revision <rev> --operation-id <id> [--output human|json]
 
-Mutations also accept human or JSON output; JSON is required for Agent skill use.
+Mutations also accept human or JSON output. Skills may consume JSON for review operations, but an
+approval command always requires direct interactive TTY input even when its final result is JSON.
 
 ## Approval Authority
 
-The revision argument selects the candidate and confirm must repeat that exact revision. The domain
-layer requires a human actor and rechecks eligibility under the Intent lock. This is local,
-unauthenticated attribution rather than proof of identity.
+The revision argument selects the candidate. The command asks the core to prepare approval, displays
+the exact revision and hashes plus a fresh challenge, and reads the response directly from its TTY.
+It then submits the bound one-use capability and response. There is no flag, stdin field, environment
+variable, or JSON-only route that can supply approval confirmation. Non-TTY invocation returns
+`tty_required`. The domain layer rechecks actor, capability, eligibility, and revision under the
+Intent lock. Attribution is local and unauthenticated rather than proof of identity.
 
-The TUI approval modal displays actor, revision, revision hash, approved-content hash preview, and
-blockers. A fresh human keypress dispatches approval. Approval is unavailable while ineligible.
+The TUI approval modal displays actor, revision, revision hash, approved-content hash preview,
+challenge, and blockers. A fresh human response dispatches approval. Approval is unavailable while
+ineligible. Success creates a new `approved` child revision of the confirmed `review_complete`
+revision and then publishes the immutable snapshot.
+
+Item editing has the same two-step semantics in CLI and TUI: obtain a core-issued preview, show the
+before/after hunk, then apply only with the matching short-lived one-use preview token.
 
 ## JSON Result Envelope
 
@@ -65,8 +75,8 @@ The JSON envelope is authoritative; exit status is only a coarse shell signal.
 
 Initial codes include invalid_artifact, unsupported_schema, duplicate_id, broken_reference,
 invalid_transition, stale_revision, operation_id_conflict, approval_ineligible, open_comment,
-unreviewed_item, missing_actor, tty_required, integrity_failure, persistence_failure, and
-internal_error.
+unreviewed_item, missing_actor, tty_required, invalid_confirmation, confirmation_expired,
+confirmation_consumed, integrity_failure, persistence_failure, and internal_error.
 
 Adding a code is backward-compatible within contract major version 1. Removing or changing a
 code's meaning requires a major-version increment.

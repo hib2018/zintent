@@ -15,11 +15,14 @@
 ├── intent.json
 ├── revisions/<revision-id>.json
 ├── snapshots/sha256-<approved-content-hash>.json
+├── capabilities/<token-id>.json
 └── .lock/
 ```
 
-The lock directory exists only while a mutation owns the per-Intent lock. Published revision and
-snapshot files are never opened for modification. The HEAD manifest is the only replaced artifact.
+The lock directory exists only while a mutation owns the per-Intent lock. Capability records are
+short-lived core-owned records outside revision history and are atomically consumed or expired.
+Published revision and snapshot files are never opened for modification. The HEAD manifest is the
+only replaced durable workflow artifact.
 
 ## Head Manifest
 
@@ -99,21 +102,37 @@ content. Reintroduction creates a new item that supersedes the rejected item.
 Item edit and rejection never close comments automatically. Only an explicit human resolve or
 withdraw operation changes status.
 
-## Actor and Provenance
+## Operation Actor, Content Origin, and Provenance
 
-Actor contains `actor_type` (`human`, `ai`, or `system`), non-empty `actor_id`, `identity_source`
-(`os_user` or `explicit_fallback`), and `authenticated`. Human actors are unauthenticated in Feature
-001. If the OS username is unavailable, mutations require an explicit fallback actor ID.
+Operation Actor contains `actor_type` (fixed to `human` in Feature 001), non-empty `actor_id`,
+`identity_source` (`os_user` or `explicit_fallback`), and `authenticated` (always false). If the OS
+username is unavailable, mutations require an explicit fallback actor ID.
 
-Provenance contains the Actor, operation ID, stable operation type, producing revision ID, and
-optional source references. The domain service generates it; operation content cannot override it.
+Content Origin independently identifies where an item's statement came from: `source`, `human`,
+`ai`, or `system`, plus optional source-reference IDs. It grants no operation authority.
+
+Provenance contains Content Origin, the latest Operation Actor when applicable, operation ID,
+stable operation type, producing revision ID, and source references. The core generates it;
+operation content cannot override it.
+
+## Confirmation Capability
+
+Edit Preview Capability binds a token ID, Intent ID, expected revision ID, item ID, actor ID, before
+hash, proposed-statement hash, issuance time, expiry, and consumed state. It is short-lived and
+one-use; any edit-relevant change invalidates it.
+
+Approval Confirmation Capability binds a token ID, Intent ID, confirmed review-complete revision ID
+and hash, approved-content hash preview, actor ID, issuance time, expiry, TTY challenge, and consumed
+state. Capability records live in a core-owned transient registry outside immutable revisions and
+snapshots so separate one-shot core invocations can consume them atomically. Expired records are
+safe to delete; issuance or cleanup never changes HEAD.
 
 ## Operations
 
-Supported types are `start_review`, `accept_item`, `edit_item`, `reject_item`, `add_comment`,
-`resolve_comment`, `withdraw_comment`, `complete_review`, `approve_intent`, and
-`reopen_after_approval`. Operations store target IDs and audit content; identity, provenance,
-revision IDs, hashes, and lifecycle effects are derived.
+Supported types are `start_review`, `accept_item`, `preview_edit`, `edit_item`, `reject_item`,
+`add_comment`, `resolve_comment`, `withdraw_comment`, `complete_review`, `prepare_approval`, and
+`approve_intent`. Preview and preparation are read-only. State-changing operations store target IDs
+and audit content; identity, provenance, revision IDs, hashes, and lifecycle effects are derived.
 
 ## Validation Finding
 
@@ -130,10 +149,12 @@ eligibility, or persistence integrity. AI semantic findings are out of scope.
 
 ## Approval and Snapshot
 
-Approval records an approval ID, approved revision ID and hash, approved-content hash, approving
-Actor, timestamp, and validation result with zero blockers. Approved content contains the Intent
-ID, schema version, included accepted/edited items, applicable sources, and downstream lineage.
-Rejected items and review comments remain in history but are excluded from approved content.
+Approval records an approval ID, confirmed review-complete revision ID and hash, resulting approved
+revision ID and hash, approved-content hash, confirmation token ID, approving Operation Actor,
+timestamp, and validation result with zero blockers. The approved revision is a new child of the
+confirmed revision with identical Intent content and `approved` lifecycle. Approved content contains
+the Intent ID, schema version, included accepted/edited items, applicable sources, and downstream
+lineage. Rejected items and review comments remain in history but are excluded from approved content.
 
 The snapshot envelope contains `approved_content` and `approval`. Its ID and filename derive from
 the approved-content hash. Approval metadata is outside that hash projection to avoid recursion.
@@ -145,9 +166,9 @@ the approved-content hash. Approval metadata is outside that hash projection to 
 | draft | start review | Valid Draft and available human actor | in_review |
 | in_review | review mutation | Expected revision matches and command validates | in_review |
 | in_review | complete review | Included items reviewed; no open comments | review_complete |
-| review_complete | approve | Eligibility rechecked; human confirms exact revision | approved |
+| review_complete | approve | Eligibility and one-use TTY challenge rechecked; creates child revision | approved |
 | review_complete | review mutation | Valid mutation | in_review |
-| approved | reopen/change | Valid mutation creates working revision | in_review |
+| approved | normal review mutation | Valid mutation creates working revision | in_review |
 
 No other transitions are permitted. A failed command publishes no reachable revision, and an
 issued snapshot never transitions.

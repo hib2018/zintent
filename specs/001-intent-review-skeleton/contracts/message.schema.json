@@ -23,17 +23,19 @@
             "diff_revisions",
             "start_review",
             "accept_item",
+            "preview_edit",
             "edit_item",
             "reject_item",
             "add_comment",
             "resolve_comment",
             "withdraw_comment",
             "complete_review",
+            "prepare_approval",
             "approve_intent"
           ]
         },
         "payload_schema": {"type": "string", "pattern": "^zintent\\.[a-z0-9-]+/[1-9][0-9]*$"},
-        "payload": {"type": "object"}
+        "payload": {"$ref": "command.schema.json"}
       }
     },
     "success": {
@@ -45,7 +47,7 @@
         "request_id": {"type": "string", "format": "uuid"},
         "ok": {"const": true},
         "result_schema": {"type": "string", "pattern": "^zintent\\.[a-z0-9-]+/[1-9][0-9]*$"},
-        "result": {"type": "object"}
+        "result": {"$ref": "result.schema.json"}
       }
     },
     "failure": {

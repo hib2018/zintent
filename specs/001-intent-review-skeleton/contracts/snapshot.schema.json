@@ -35,11 +35,15 @@
               "kind": {"type": "string", "minLength": 1},
               "statement": {"type": "string", "minLength": 1},
               "rationale": {"type": ["string", "null"]},
-              "provenance": {"type": "object"}
-            }
+              "provenance": {"$ref": "provenance.schema.json"}
+            },
+            "additionalProperties": false
           }
         },
-        "source_references": {"type": "array", "items": {"type": "object"}}
+        "source_references": {
+          "type": "array",
+          "items": {"$ref": "source-reference.schema.json"}
+        }
       }
     },
     "approval": {
@@ -47,18 +51,24 @@
       "additionalProperties": false,
       "required": [
         "approval_id",
+        "confirmed_revision_id",
+        "confirmed_revision_hash",
         "approved_revision_id",
         "approved_revision_hash",
         "approved_content_hash",
+        "confirmation_token_id",
         "approving_actor",
         "approved_at",
         "validation_result"
       ],
       "properties": {
         "approval_id": {"type": "string", "format": "uuid"},
+        "confirmed_revision_id": {"type": "string", "format": "uuid"},
+        "confirmed_revision_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "approved_revision_id": {"type": "string", "format": "uuid"},
         "approved_revision_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "approved_content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "confirmation_token_id": {"type": "string", "format": "uuid"},
         "approving_actor": {
           "type": "object",
           "required": ["actor_type", "actor_id", "identity_source", "authenticated"],

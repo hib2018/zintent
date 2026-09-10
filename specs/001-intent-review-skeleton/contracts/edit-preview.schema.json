@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zintent.local/schemas/edit-preview-1.0.0.json",
+  "title": "zintent Edit Preview Capability 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "token_id",
+    "intent_id",
+    "expected_revision_id",
+    "item_id",
+    "actor_id",
+    "before_statement",
+    "after_statement",
+    "before_hash",
+    "after_hash",
+    "issued_at",
+    "expires_at",
+    "consumed"
+  ],
+  "properties": {
+    "token_id": {"type": "string", "format": "uuid"},
+    "intent_id": {"type": "string", "format": "uuid"},
+    "expected_revision_id": {"type": "string", "format": "uuid"},
+    "item_id": {"type": "string", "format": "uuid"},
+    "actor_id": {"type": "string", "minLength": 1},
+    "before_statement": {"type": "string"},
+    "after_statement": {"type": "string", "minLength": 1},
+    "before_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "after_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "issued_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "consumed": {"const": false}
+  }
+}
