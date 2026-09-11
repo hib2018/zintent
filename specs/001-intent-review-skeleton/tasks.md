@@ -26,12 +26,12 @@ owns CLI/TUI presentation and bounded core-process orchestration.
 
 **Purpose**: Establish the two-project Go/Zig build and verification skeleton.
 
-- [ ] T001 Pin Zig 0.16.0 and Go 1.27.1 in .tool-versions, install any missing pinned toolchain, and create core/src/, core/tests/, tui/cmd/zintent/, tui/internal/, tests/contract/fixtures/, tests/integration/, and tests/fixtures/
-- [ ] T002 Initialize the Zig 0.16.0 build, zintent-core executable, and core test steps in build.zig and build.zig.zon
+- [X] T001 Pin Zig 0.16.0 and Go 1.27.1 in .tool-versions, install any missing pinned toolchain, and create core/src/, core/tests/, tui/cmd/zintent/, tui/internal/, tests/contract/fixtures/, tests/integration/, and tests/fixtures/
+- [X] T002 Initialize the Zig 0.16.0 build, zintent-core executable, and core test steps in build.zig and build.zig.zon
 - [ ] T003 [P] Initialize the Go 1.27.1 module and pin Bubble Tea v2.0.8 with compatible Bubbles and Lip Gloss v2 dependencies in tui/go.mod and tui/go.sum
-- [ ] T004 [P] Add Zig formatting and test commands plus Go formatting, vet, and test commands to ./Makefile
-- [ ] T005 [P] Configure repository ignores for Zig caches, built binaries, temporary Intent locks, and local fixture output in ./.gitignore
-- [ ] T006 Add macOS and Linux matrix jobs for Zig and Go build/test validation in .github/workflows/ci.yml
+- [X] T004 [P] Add Zig formatting and test commands plus Go formatting, vet, and test commands to ./Makefile
+- [X] T005 [P] Configure repository ignores for Zig caches, built binaries, temporary Intent locks, and local fixture output in ./.gitignore
+- [X] T006 Add macOS and Linux matrix jobs for Zig and Go build/test validation in .github/workflows/ci.yml
 
 **Checkpoint**: Both empty executables build and both test runners execute on supported platforms.
 

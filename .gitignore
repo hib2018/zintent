@@ -1,0 +1,14 @@
+.DS_Store
+.zig-cache/
+zig-out/
+*.exe
+*.test
+*.out
+vendor/
+*.tmp
+*.swp
+.vscode/
+.idea/
+**/.lock/
+**/capabilities/
+tests/fixtures/output/
