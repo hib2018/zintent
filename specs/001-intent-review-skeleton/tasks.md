@@ -28,7 +28,7 @@ owns CLI/TUI presentation and bounded core-process orchestration.
 
 - [X] T001 Pin Zig 0.16.0 and Go 1.27.1 in .tool-versions, install any missing pinned toolchain, and create core/src/, core/tests/, tui/cmd/zintent/, tui/internal/, tests/contract/fixtures/, tests/integration/, and tests/fixtures/
 - [X] T002 Initialize the Zig 0.16.0 build, zintent-core executable, and core test steps in build.zig and build.zig.zon
-- [ ] T003 [P] Initialize the Go 1.27.1 module and pin Bubble Tea v2.0.8 with compatible Bubbles and Lip Gloss v2 dependencies in tui/go.mod and tui/go.sum
+- [X] T003 [P] Initialize the Go 1.27.1 module and pin Bubble Tea v2.0.8 with compatible Bubbles and Lip Gloss v2 dependencies in tui/go.mod and tui/go.sum
 - [X] T004 [P] Add Zig formatting and test commands plus Go formatting, vet, and test commands to ./Makefile
 - [X] T005 [P] Configure repository ignores for Zig caches, built binaries, temporary Intent locks, and local fixture output in ./.gitignore
 - [X] T006 Add macOS and Linux matrix jobs for Zig and Go build/test validation in .github/workflows/ci.yml
@@ -45,17 +45,17 @@ that block every user story.
 **CRITICAL**: No user-story implementation starts until the shared contract fixtures pass in both
 languages and the Zig core is the only path capable of changing an Intent.
 
-- [ ] T007 [P] Create valid and invalid protocol-envelope and strict command-payload fixtures from contracts/message.schema.json and contracts/command.schema.json in tests/contract/fixtures/messages/
-- [ ] T008 [P] Create valid and invalid Intent, HEAD, provenance, source-reference, edit-preview, approval-confirmation, result, and snapshot fixtures from every contracts/*.schema.json artifact schema in tests/contract/fixtures/artifacts/
-- [ ] T009 [P] Create RFC 8785 and SHA-256 golden vectors including key-order, whitespace, Unicode, and array-order cases in tests/contract/fixtures/hashes/
-- [ ] T010 Write failing strict protocol decoding, envelope/payload operation equality, external schema-reference, unknown nested-field, and request/response correlation tests in core/tests/contract.zig
-- [ ] T011 [P] Write failing Go protocol compatibility tests against the shared fixture corpus in tests/contract/compatibility_test.go
-- [ ] T012 Implement strict protocol message decoding, 16 MiB limits, unknown-field rejection, request-ID echoing, and one-response stdout discipline in core/src/protocol.zig
-- [ ] T013 [P] Implement matching strict Go request/response types and schema identifiers in tui/internal/protocol/message.go
-- [ ] T014 Implement the no-shell, 10-second, bounded stdin/stdout/stderr Zig subprocess runner with cancellation in tui/internal/runner/core.go
-- [ ] T015 [P] Define ID, timestamp, human OperationActor, independent ContentOrigin, Provenance, Finding, lifecycle, and operation types in core/src/model.zig
-- [ ] T016 [P] Define strict command payloads with expected revision, operation ID, edit-preview capability, and approval-confirmation capability types in core/src/command.zig
-- [ ] T017 Implement RFC 8785 canonicalization projections and SHA-256 verification against golden vectors in core/src/hashing.zig
+- [X] T007 [P] Create valid and invalid protocol-envelope and strict command-payload fixtures from contracts/message.schema.json and contracts/command.schema.json in tests/contract/fixtures/messages/
+- [X] T008 [P] Create valid and invalid Intent, HEAD, provenance, source-reference, edit-preview, approval-confirmation, result, and snapshot fixtures from every contracts/*.schema.json artifact schema in tests/contract/fixtures/artifacts/
+- [X] T009 [P] Create RFC 8785 and SHA-256 golden vectors including key-order, whitespace, Unicode, and array-order cases in tests/contract/fixtures/hashes/
+- [X] T010 Write failing strict protocol decoding, envelope/payload operation equality, external schema-reference, unknown nested-field, and request/response correlation tests in core/tests/contract.zig
+- [X] T011 [P] Write failing Go protocol compatibility tests against the shared fixture corpus in tests/contract/compatibility_test.go
+- [X] T012 Implement strict protocol message decoding, 16 MiB limits, unknown-field rejection, request-ID echoing, and one-response stdout discipline in core/src/protocol.zig
+- [X] T013 [P] Implement matching strict Go request/response types and schema identifiers in tui/internal/protocol/message.go
+- [X] T014 Implement the no-shell, 10-second, bounded stdin/stdout/stderr Zig subprocess runner with cancellation in tui/internal/runner/core.go
+- [X] T015 [P] Define ID, timestamp, human OperationActor, independent ContentOrigin, Provenance, Finding, lifecycle, and operation types in core/src/model.zig
+- [X] T016 [P] Define strict command payloads with expected revision, operation ID, edit-preview capability, and approval-confirmation capability types in core/src/command.zig
+- [X] T017 Implement RFC 8785 canonicalization projections and SHA-256 verification against golden vectors in core/src/hashing.zig
 - [ ] T018 Implement per-Intent locking, core-owned transient capability registry with atomic one-use consumption and expiry cleanup, same-directory temp publication, file and directory sync, exclusive immutable-file creation, and HEAD-last replacement in core/src/store.zig
 - [ ] T019 Implement core operation dispatch and stable success/error envelope mapping in core/src/main.zig
 - [ ] T020 Wire Go command parsing, OS actor discovery with explicit fallback, coarse exit statuses, and human/JSON output selection in tui/cmd/zintent/main.go and tui/internal/output/result.go

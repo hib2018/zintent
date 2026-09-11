@@ -8,7 +8,7 @@ import (
 
 func TestNavigationAndStableSelection(t *testing.T) {
 	m := New([]Item{{ID: "i1"}, {ID: "i2"}})
-	next, _ := m.Update(tea.KeyPressMsg{Key: "j"})
+	next, _ := m.Update(tea.KeyPressMsg(tea.Key{Text: "j", Code: 'j'}))
 	if next.(Model).Selected != 1 {
 		t.Fatal("expected second item")
 	}

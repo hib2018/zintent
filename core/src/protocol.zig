@@ -1,5 +1,6 @@
 const std = @import("std");
 const model = @import("model.zig");
+const command = @import("command.zig");
 
 pub const protocol_version = "1.0";
 pub const max_message_bytes: usize = 16 * 1024 * 1024;
@@ -36,12 +37,17 @@ pub fn parseRequest(allocator: std.mem.Allocator, bytes: []const u8) !ParsedRequ
     errdefer parsed.deinit();
     if (!std.mem.eql(u8, parsed.value.protocol_version, protocol_version)) return error.UnsupportedProtocolVersion;
     if (parsed.value.request_id.len == 0 or parsed.value.request_id.len > 128) return error.InvalidRequestId;
+    if (!std.mem.eql(u8, parsed.value.payload_schema, "zintent.command/1")) return error.InvalidPayloadSchema;
     const payload = switch (parsed.value.payload) {
         .object => |o| o,
         else => return error.InvalidOperationPayload,
     };
     const op = payload.get("operation") orelse return error.InvalidOperationPayload;
     if (op != .string or !std.mem.eql(u8, op.string, @tagName(parsed.value.operation))) return error.OperationMismatch;
+    var typed = std.json.parseFromValue(command.Command, allocator, parsed.value.payload, .{}) catch
+        return error.InvalidOperationPayload;
+    defer typed.deinit();
+    typed.value.validate() catch return error.InvalidOperationPayload;
     return parsed;
 }
 

@@ -1,0 +1,1 @@
+{"contract_version":"1.0.0","ok":true,"operation":"protocol_info","affected_ids":[],"findings":[],"data":{"capabilities":["strict_json"],"limits":{"stream_bytes":16777216,"deadline_seconds":10}}}
