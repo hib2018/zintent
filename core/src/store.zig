@@ -9,6 +9,10 @@ pub const Head = struct {
     approved_snapshot_ref: ?[]const u8 = null,
 };
 
+pub fn newHead(intent_id: []const u8, revision_id: []const u8, revision_hash: []const u8, lifecycle_state: []const u8) Head {
+    return .{ .intent_id = intent_id, .current_revision_id = revision_id, .current_revision_hash = revision_hash, .lifecycle_state = lifecycle_state };
+}
+
 pub fn verifyHead(head: Head) !void {
     if (head.intent_id.len == 0 or head.current_revision_id.len == 0 or head.current_revision_hash.len != 64)
         return error.InvalidHead;

@@ -92,6 +92,22 @@ pub const Revision = struct {
     revision_payload: RevisionPayload,
 };
 
+pub fn newItem(item_id: []const u8, kind: []const u8, statement: []const u8, provenance: Provenance) Item {
+    return .{ .item_id = item_id, .kind = kind, .statement = statement, .provenance = provenance };
+}
+
+pub fn newComment(comment_id: []const u8, target_item_id: []const u8, body: []const u8, author: Actor, created_revision_id: []const u8) Comment {
+    return .{ .comment_id = comment_id, .target_item_id = target_item_id, .body = body, .author = author, .created_revision_id = created_revision_id };
+}
+
+pub fn newRevisionPayload(intent_id: []const u8, lifecycle_state: Lifecycle, source_references: []const SourceReference, items: []const Item, comments: []const Comment) RevisionPayload {
+    return .{ .intent_id = intent_id, .lifecycle_state = lifecycle_state, .source_references = source_references, .items = items, .comments = comments, .approval_refs = &.{} };
+}
+
+pub fn newRevision(schema_version: []const u8, revision_id: []const u8, revision_hash: []const u8, parent_revision_id: ?[]const u8, operation_id: []const u8, actor: Actor, operation: OperationRecord, created_at: []const u8, payload: RevisionPayload) Revision {
+    return .{ .schema_version = schema_version, .revision_id = revision_id, .revision_hash = revision_hash, .hash_algorithm = "sha-256", .canonicalization = "jcs-rfc8785", .parent_revision_id = parent_revision_id, .operation_id = operation_id, .actor = actor, .operation = operation, .created_at = created_at, .revision_payload = payload };
+}
+
 pub const Finding = struct {
     code: []const u8,
     severity: []const u8 = "blocking",
@@ -129,4 +145,17 @@ pub fn isMutation(op: Operation) bool {
 test "actor is local unauthenticated human" {
     try (Actor{ .actor_id = "alice", .identity_source = "os_user" }).validate();
     try std.testing.expectError(error.InvalidActor, (Actor{ .actor_type = "ai", .actor_id = "bot", .identity_source = "explicit_fallback" }).validate());
+}
+
+test "constructors create a draft payload with safe review defaults" {
+    const actor = Actor{ .actor_id = "alice", .identity_source = "explicit_fallback" };
+    const provenance = Provenance{ .content_origin = .source, .operation_id = "op", .operation_type = "fixture_import", .revision_id = "rev" };
+    const item = newItem("i-1", "goal", "Ship it", provenance);
+    const comment = newComment("c-1", item.item_id, "Clarify", actor, "rev");
+    const items = [_]Item{item};
+    const comments = [_]Comment{comment};
+    const payload = newRevisionPayload("intent-1", .draft, &.{}, &items, &comments);
+    try std.testing.expectEqual(Lifecycle.draft, payload.lifecycle_state);
+    try std.testing.expectEqual(ReviewStatus.unreviewed, payload.items[0].review_status);
+    try std.testing.expectEqual(CommentStatus.open, payload.comments[0].status);
 }

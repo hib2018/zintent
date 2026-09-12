@@ -87,7 +87,7 @@ stale or invalid actions create no reachable revision. Deep chain inspection rem
 ### Implementation for User Story 1
 
 - [X] T028 [P] [US1] Implement strict Intent revision decoding and structural/referential validation in core/src/validation.zig
-- [ ] T029 [P] [US1] Implement Draft, Intent Item, Comment, Revision, and HEAD manifest domain constructors in core/src/model.zig
+- [X] T029 [P] [US1] Implement Draft, Intent Item, Comment, Revision, and HEAD manifest domain constructors in core/src/model.zig
 - [ ] T030 [US1] Implement start_review, accept_item, preview_edit, capability-bound edit_item, reject_item, add_comment, resolve_comment, and withdraw_comment transition rules in core/src/transition.zig
 - [ ] T031 [US1] Implement independent ContentOrigin plus mechanically derived human OperationActor provenance, UUID v7 allocation, operation idempotency, capability issuance/consumption, and parent revision creation in core/src/command.zig
 - [ ] T032 [US1] Integrate review mutations with lock/revalidate/publish/HEAD-last storage flow and verified HEAD loading needed to reopen the current review in core/src/store.zig and core/src/main.zig
