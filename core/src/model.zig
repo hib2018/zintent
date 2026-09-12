@@ -55,6 +55,43 @@ pub const Comment = struct {
     resolution_revision_id: ?[]const u8 = null,
 };
 
+pub const OperationRecord = struct {
+    type: []const u8,
+    target_ids: []const []const u8,
+    content_digest: ?[]const u8 = null,
+};
+
+pub const SourceReference = struct {
+    source_reference_id: []const u8,
+    kind: []const u8,
+    locator: []const u8,
+    content_hash: ?[]const u8 = null,
+    excerpt: ?[]const u8 = null,
+};
+
+pub const RevisionPayload = struct {
+    intent_id: []const u8,
+    lifecycle_state: Lifecycle,
+    source_references: []const SourceReference,
+    items: []const Item,
+    comments: []const Comment,
+    approval_refs: []const []const u8,
+};
+
+pub const Revision = struct {
+    schema_version: []const u8,
+    revision_id: []const u8,
+    revision_hash: []const u8,
+    hash_algorithm: []const u8,
+    canonicalization: []const u8,
+    parent_revision_id: ?[]const u8,
+    operation_id: []const u8,
+    actor: Actor,
+    operation: OperationRecord,
+    created_at: []const u8,
+    revision_payload: RevisionPayload,
+};
+
 pub const Finding = struct {
     code: []const u8,
     severity: []const u8 = "blocking",

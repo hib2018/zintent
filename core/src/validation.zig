@@ -49,6 +49,20 @@ pub fn validateIntent(value: std.json.Value) !void {
     }
 }
 
+pub fn parseRevision(allocator: std.mem.Allocator, bytes: []const u8) !std.json.Parsed(model.Revision) {
+    var parsed = std.json.parseFromSlice(model.Revision, allocator, bytes, .{}) catch |err| return switch (err) {
+        error.UnknownField => error.UnknownField,
+        error.DuplicateField => error.DuplicateField,
+        else => error.InvalidIntent,
+    };
+    errdefer parsed.deinit();
+    if (!std.mem.eql(u8, parsed.value.schema_version, "1.0.0") or
+        !std.mem.eql(u8, parsed.value.hash_algorithm, "sha-256") or
+        !std.mem.eql(u8, parsed.value.canonicalization, "jcs-rfc8785")) return error.UnsupportedSchema;
+    try validateItems(parsed.value.revision_payload.items, parsed.value.revision_payload.comments);
+    return parsed;
+}
+
 test "intent structural validation accepts a revision payload and rejects empty items" {
     const allocator = std.testing.allocator;
     var parsed = try std.json.parseFromSlice(std.json.Value, allocator,
@@ -60,4 +74,16 @@ test "intent structural validation accepts a revision payload and rejects empty 
         "{\"revision_payload\":{\"items\":[{\"statement\":\"\"}]}}", .{});
     defer invalid.deinit();
     try std.testing.expectError(error.InvalidIntent, validateIntent(invalid.value));
+}
+
+test "revision parser rejects unsupported schema and unknown fields" {
+    const allocator = std.testing.allocator;
+    const valid =
+        "{\"schema_version\":\"1.0.0\",\"revision_id\":\"r\",\"revision_hash\":\"hash\",\"hash_algorithm\":\"sha-256\",\"canonicalization\":\"jcs-rfc8785\",\"parent_revision_id\":null,\"operation_id\":\"op\",\"actor\":{\"actor_type\":\"human\",\"actor_id\":\"alice\",\"identity_source\":\"explicit_fallback\",\"authenticated\":false},\"operation\":{\"type\":\"start_review\",\"target_ids\":[]},\"created_at\":\"now\",\"revision_payload\":{\"intent_id\":\"i\",\"lifecycle_state\":\"draft\",\"source_references\":[],\"items\":[],\"comments\":[],\"approval_refs\":[]}}";
+    var parsed = try parseRevision(allocator, valid);
+    defer parsed.deinit();
+    try std.testing.expectEqualStrings("r", parsed.value.revision_id);
+    const invalid = try std.mem.replaceOwned(u8, allocator, valid, "1.0.0", "2.0.0");
+    defer allocator.free(invalid);
+    try std.testing.expectError(error.UnsupportedSchema, parseRevision(allocator, invalid));
 }
