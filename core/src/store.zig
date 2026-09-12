@@ -56,10 +56,60 @@ fn publishInDir(allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, desti
         }
     }
     try dir.rename(temporary, dir, destination, io);
+    const parent_path = std.fs.path.dirname(destination) orelse ".";
+    var parent = try dir.openDir(io, parent_path, .{});
+    defer parent.close(io);
+    try (std.Io.File{ .handle = parent.handle, .flags = .{ .nonblocking = false } }).sync(io);
 }
 
 pub fn consumeCapability(io: std.Io, token_path: []const u8, consumed_path: []const u8) !void {
     std.Io.Dir.cwd().rename(token_path, std.Io.Dir.cwd(), consumed_path, io) catch return error.InvalidOrConsumedCapability;
+}
+
+pub fn publishRevisionAndHead(allocator: std.mem.Allocator, io: std.Io, revision_path: []const u8, revision_bytes: []const u8, head_path: []const u8, head_bytes: []const u8) !void {
+    // HEAD is deliberately published last. A failure after the immutable
+    // revision write leaves only a safe orphan, never a partial reachable state.
+    try publishAtomic(allocator, io, revision_path, revision_bytes, true);
+    try publishAtomic(allocator, io, head_path, head_bytes, false);
+}
+
+pub const CapabilityRecord = struct {
+    token_id: []const u8,
+    intent_id: []const u8,
+    expected_revision_id: []const u8,
+    actor_id: []const u8,
+    payload_hash: []const u8,
+    expires_at_unix: i64,
+};
+
+pub fn issueCapability(allocator: std.mem.Allocator, io: std.Io, registry: []const u8, record: CapabilityRecord) !void {
+    if (record.token_id.len == 0 or record.intent_id.len == 0 or record.payload_hash.len != 64) return error.InvalidCapability;
+    var output: std.Io.Writer.Allocating = .init(allocator);
+    defer output.deinit();
+    try std.json.Stringify.value(record, .{}, &output.writer);
+    const path = try std.fmt.allocPrint(allocator, "{s}/{s}.json", .{ registry, record.token_id });
+    defer allocator.free(path);
+    try publishAtomic(allocator, io, path, output.written(), true);
+}
+
+pub fn consumeCapabilityRecord(allocator: std.mem.Allocator, io: std.Io, registry: []const u8, token_id: []const u8, now_unix: i64) !std.json.Parsed(CapabilityRecord) {
+    const active = try std.fmt.allocPrint(allocator, "{s}/{s}.json", .{ registry, token_id });
+    defer allocator.free(active);
+    const consumed = try std.fmt.allocPrint(allocator, "{s}/.{s}.consumed", .{ registry, token_id });
+    defer allocator.free(consumed);
+    try consumeCapability(io, active, consumed);
+    errdefer std.Io.Dir.cwd().deleteFile(io, consumed) catch {};
+    var file = try std.Io.Dir.cwd().openFile(io, consumed, .{});
+    defer file.close(io);
+    var buffer: [1024]u8 = undefined;
+    var reader = file.reader(io, &buffer);
+    const bytes = try reader.interface.allocRemaining(allocator, .limited(16 * 1024));
+    defer allocator.free(bytes);
+    var parsed = try std.json.parseFromSlice(CapabilityRecord, allocator, bytes, .{ .allocate = .alloc_always });
+    errdefer parsed.deinit();
+    std.Io.Dir.cwd().deleteFile(io, consumed) catch {};
+    if (parsed.value.expires_at_unix <= now_unix) return error.ExpiredCapability;
+    return parsed;
 }
 
 test "HEAD requires content identity" {
@@ -83,4 +133,34 @@ test "atomic publication writes complete bytes and refuses exclusive overwrite" 
     defer std.testing.allocator.free(bytes);
     try std.testing.expectEqualStrings("{\"ok\":true}", bytes);
     try std.testing.expectError(error.DestinationExists, publishInDir(std.testing.allocator, std.testing.io, tmp.dir, "revisions/r1.json", "different", true));
+}
+
+test "capability is consumed once and expiry is enforced" {
+    const allocator = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const registry = try std.fmt.allocPrint(allocator, ".zig-cache/tmp/{s}/capabilities", .{&tmp.sub_path});
+    defer allocator.free(registry);
+    const record = CapabilityRecord{
+        .token_id = "token-1",
+        .intent_id = "intent-1",
+        .expected_revision_id = "revision-1",
+        .actor_id = "alice",
+        .payload_hash = "0000000000000000000000000000000000000000000000000000000000000000",
+        .expires_at_unix = 100,
+    };
+    try issueCapability(allocator, std.testing.io, registry, record);
+    var loaded = try consumeCapabilityRecord(allocator, std.testing.io, registry, "token-1", 99);
+    defer loaded.deinit();
+    try std.testing.expectEqualStrings("intent-1", loaded.value.intent_id);
+    try std.testing.expectError(error.InvalidOrConsumedCapability, consumeCapabilityRecord(allocator, std.testing.io, registry, "token-1", 99));
+    try issueCapability(allocator, std.testing.io, registry, .{
+        .token_id = "expired",
+        .intent_id = "intent-1",
+        .expected_revision_id = "revision-1",
+        .actor_id = "alice",
+        .payload_hash = "0000000000000000000000000000000000000000000000000000000000000000",
+        .expires_at_unix = 100,
+    });
+    try std.testing.expectError(error.ExpiredCapability, consumeCapabilityRecord(allocator, std.testing.io, registry, "expired", 100));
 }

@@ -56,9 +56,9 @@ languages and the Zig core is the only path capable of changing an Intent.
 - [X] T015 [P] Define ID, timestamp, human OperationActor, independent ContentOrigin, Provenance, Finding, lifecycle, and operation types in core/src/model.zig
 - [X] T016 [P] Define strict command payloads with expected revision, operation ID, edit-preview capability, and approval-confirmation capability types in core/src/command.zig
 - [X] T017 Implement RFC 8785 canonicalization projections and SHA-256 verification against golden vectors in core/src/hashing.zig
-- [ ] T018 Implement per-Intent locking, core-owned transient capability registry with atomic one-use consumption and expiry cleanup, same-directory temp publication, file and directory sync, exclusive immutable-file creation, and HEAD-last replacement in core/src/store.zig
-- [ ] T019 Implement core operation dispatch and stable success/error envelope mapping in core/src/main.zig
-- [ ] T020 Wire Go command parsing, OS actor discovery with explicit fallback, coarse exit statuses, and human/JSON output selection in tui/cmd/zintent/main.go and tui/internal/output/result.go
+- [X] T018 Implement per-Intent locking, core-owned transient capability registry with atomic one-use consumption and expiry cleanup, same-directory temp publication, file and directory sync, exclusive immutable-file creation, and HEAD-last replacement in core/src/store.zig
+- [X] T019 Implement core operation dispatch and stable success/error envelope mapping in core/src/main.zig
+- [X] T020 Wire Go command parsing, OS actor discovery with explicit fallback, coarse exit statuses, and human/JSON output selection in tui/cmd/zintent/main.go and tui/internal/output/result.go
 
 **Checkpoint**: Go can invoke read-only protocol_info through Zig; both languages pass the same
 strict contract corpus; no mutation bypass exists.
@@ -76,8 +76,8 @@ stale or invalid actions create no reachable revision. Deep chain inspection rem
 
 ### Tests for User Story 1
 
-- [ ] T021 [P] [US1] Write failing typed-decoding, duplicate-ID, broken-reference, empty-statement, and rejected-rationale tests in core/tests/model_validation.zig
-- [ ] T022 [P] [US1] Write failing draft-to-review and item/comment transition table tests in core/tests/transition.zig
+- [X] T021 [P] [US1] Write failing typed-decoding, duplicate-ID, broken-reference, empty-statement, and rejected-rationale tests in core/tests/model_validation.zig
+- [X] T022 [P] [US1] Write failing draft-to-review and item/comment transition table tests in core/tests/transition.zig
 - [ ] T023 [P] [US1] Write failing stale-revision, idempotent-retry, operation-ID conflict, and no-partial-publication tests in core/tests/persistence_failure.zig
 - [ ] T024 [P] [US1] Write failing public CLI JSON-envelope tests for validate, show, item actions, comment actions, and complete-review syntax in tests/integration/review_cli_test.go
 - [ ] T025 [P] [US1] Write failing Bubble Tea reducer tests for navigation, modal cancellation, confirmation, stable-ID selection, resize, and stale reload in tui/internal/ui/review_test.go

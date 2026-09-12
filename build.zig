@@ -39,4 +39,22 @@ pub fn build(b: *std.Build) void {
         }),
     });
     test_step.dependOn(&b.addRunArtifact(contract_tests).step);
+    const model_validation_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("core/tests/model_validation.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "zintent_core", .module = core }},
+        }),
+    });
+    test_step.dependOn(&b.addRunArtifact(model_validation_tests).step);
+    const transition_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("core/tests/transition.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "zintent_core", .module = core }},
+        }),
+    });
+    test_step.dependOn(&b.addRunArtifact(transition_tests).step);
 }
