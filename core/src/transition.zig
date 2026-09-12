@@ -1,6 +1,12 @@
 const std = @import("std");
 const model = @import("model.zig");
 
+pub const EditPreview = struct {
+    item_id: []const u8,
+    before: []const u8,
+    after: []const u8,
+};
+
 fn findItem(items: []model.Item, item_id: []const u8) !*model.Item {
     for (items) |*item| if (std.mem.eql(u8, item.item_id, item_id)) return item;
     return error.ItemNotFound;
@@ -20,6 +26,19 @@ pub fn editItem(items: []model.Item, item_id: []const u8, statement: []const u8)
     item.statement = statement;
     item.review_status = .edited;
     item.included_in_approval = true;
+}
+
+pub fn previewEdit(items: []model.Item, item_id: []const u8, statement: []const u8) !EditPreview {
+    if (statement.len == 0) return error.InvalidItem;
+    const item = try findItem(items, item_id);
+    if (item.review_status == .rejected) return error.InvalidTransition;
+    return .{ .item_id = item.item_id, .before = item.statement, .after = statement };
+}
+
+pub fn addComment(comment_id: []const u8, target_item_id: []const u8, body: []const u8, author: model.Actor, created_revision_id: []const u8) !model.Comment {
+    if (comment_id.len == 0 or target_item_id.len == 0 or body.len == 0 or created_revision_id.len == 0) return error.InvalidComment;
+    try author.validate();
+    return model.newComment(comment_id, target_item_id, body, author, created_revision_id);
 }
 
 pub fn rejectItem(items: []model.Item, item_id: []const u8, rationale: []const u8) !void {
@@ -88,4 +107,18 @@ test "comment closure requires an open comment and a reason" {
     try closeComment(&comments, "c-1", .resolved, "addressed");
     try std.testing.expectEqual(model.CommentStatus.resolved, comments[0].status);
     try std.testing.expectError(error.InvalidTransition, closeComment(&comments, "c-1", .withdrawn, "again"));
+}
+
+test "edit preview is read-only and exposes before/after values" {
+    var items = [_]model.Item{.{ .item_id = "i-1", .kind = "goal", .statement = "old", .provenance = .{ .content_origin = .source, .operation_id = "op", .operation_type = "draft", .revision_id = "rev" } }};
+    const preview = try previewEdit(&items, "i-1", "new");
+    try std.testing.expectEqualStrings("old", preview.before);
+    try std.testing.expectEqualStrings("new", preview.after);
+    try std.testing.expectEqualStrings("old", items[0].statement);
+}
+
+test "comment creation validates actor and body" {
+    const comment = try addComment("c-1", "i-1", "Please clarify", .{ .actor_id = "alice", .identity_source = "explicit_fallback" }, "rev-1");
+    try std.testing.expectEqual(model.CommentStatus.open, comment.status);
+    try std.testing.expectError(error.InvalidComment, addComment("c-2", "i-1", "", .{ .actor_id = "alice", .identity_source = "explicit_fallback" }, "rev-1"));
 }
