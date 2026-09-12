@@ -27,3 +27,26 @@ func TestStableExitClasses(t *testing.T) {
 		t.Fatal("wrong exit mapping")
 	}
 }
+
+func TestParseMutationCommandSurface(t *testing.T) {
+	o, err := parseArgs([]string{"item", "accept", "intent", "i-1", "--expected-revision", "r-1", "--operation-id", "op-1", "--actor-id", "alice", "--json"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.operation != "accept_item" || o.payload["intent_path"] != "intent" || o.payload["item_id"] != "i-1" {
+		t.Fatalf("unexpected parsed mutation: %#v", o)
+	}
+	if o.payload["expected_revision_id"] != "r-1" || o.payload["operation_id"] != "op-1" {
+		t.Fatalf("missing mutation guards: %#v", o.payload)
+	}
+}
+
+func TestParseCommentCommandSurface(t *testing.T) {
+	o, err := parseArgs([]string{"comment", "add", "intent", "i-1", "--body-file", "comment.txt", "--expected-revision", "r-1", "--operation-id", "op-1", "--actor-id", "alice"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.operation != "add_comment" || o.payload["comment_id"] != nil || o.payload["body_file"] != "comment.txt" {
+		t.Fatalf("unexpected comment command: %#v", o)
+	}
+}

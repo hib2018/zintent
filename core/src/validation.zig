@@ -30,3 +30,34 @@ pub fn approvalEligible(items: []const model.Item, comments: []const model.Comme
     for (comments) |comment| if (comment.status == .open) return false;
     return true;
 }
+
+/// Validates the structural portion of an Intent revision without applying
+/// any lifecycle transition. Full JSON-schema validation remains at the
+/// protocol boundary; this function enforces the invariants needed by the
+/// read-only core operations.
+pub fn validateIntent(value: std.json.Value) !void {
+    const object = switch (value) { .object => |item| item, else => return error.InvalidIntent };
+    const payload = object.get("revision_payload") orelse value;
+    const payload_object = switch (payload) { .object => |item| item, else => return error.InvalidIntent };
+    const items_value = payload_object.get("items") orelse return error.InvalidIntent;
+    const items_array = switch (items_value) { .array => |item| item, else => return error.InvalidIntent };
+    if (items_array.items.len == 0) return error.InvalidIntent;
+    for (items_array.items) |item| {
+        const item_object = switch (item) { .object => |entry| entry, else => return error.InvalidIntent };
+        const statement = item_object.get("statement") orelse return error.InvalidIntent;
+        if (statement != .string or statement.string.len == 0) return error.InvalidIntent;
+    }
+}
+
+test "intent structural validation accepts a revision payload and rejects empty items" {
+    const allocator = std.testing.allocator;
+    var parsed = try std.json.parseFromSlice(std.json.Value, allocator,
+        "{\"revision_payload\":{\"items\":[{\"statement\":\"goal\"}]}}", .{});
+    defer parsed.deinit();
+    try validateIntent(parsed.value);
+
+    var invalid = try std.json.parseFromSlice(std.json.Value, allocator,
+        "{\"revision_payload\":{\"items\":[{\"statement\":\"\"}]}}", .{});
+    defer invalid.deinit();
+    try std.testing.expectError(error.InvalidIntent, validateIntent(invalid.value));
+}

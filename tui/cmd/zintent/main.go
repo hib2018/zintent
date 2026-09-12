@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/hib2018/zintent/tui/internal/output"
@@ -48,6 +49,7 @@ func run(args []string) error {
 type options struct {
 	operation, corePath string
 	jsonMode            bool
+	actorID             string
 	payload             map[string]any
 }
 
@@ -73,6 +75,30 @@ func parseArgs(args []string) (options, error) {
 			}
 			i++
 			o.corePath = args[i]
+		case "--actor-id":
+			if i+1 >= len(args) {
+				return o, errors.New("--actor-id requires a value")
+			}
+			i++
+			o.actorID = args[i]
+		case "--expected-revision", "--operation-id", "--preview-token", "--statement-file", "--reason-file", "--body-file", "--resolution-revision":
+			if i+1 >= len(args) {
+				return o, fmt.Errorf("%s requires a value", args[i])
+			}
+			key := map[string]string{
+				"--expected-revision":   "expected_revision_id",
+				"--operation-id":        "operation_id",
+				"--preview-token":       "preview_token",
+				"--statement-file":      "statement_file",
+				"--reason-file":         "reason_file",
+				"--body-file":           "body_file",
+				"--resolution-revision": "resolution_revision_id",
+			}[args[i]]
+			if key == "" {
+				key = strings.TrimPrefix(args[i], "--")
+			}
+			i++
+			o.payload[key] = args[i]
 		default:
 			positionals = append(positionals, args[i])
 		}
@@ -80,7 +106,17 @@ func parseArgs(args []string) (options, error) {
 	if len(positionals) > 0 {
 		o.operation = positionals[0]
 	}
+	if len(positionals) > 1 && positionals[0] == "item" {
+		o.operation = positionals[1] + "_item"
+		positionals = append([]string{positionals[1]}, positionals[2:]...)
+	} else if len(positionals) > 1 && positionals[0] == "comment" {
+		o.operation = positionals[1] + "_comment"
+		positionals = append([]string{positionals[1]}, positionals[2:]...)
+	}
 	if alias, ok := map[string]string{"show": "show_intent", "validate": "validate_intent", "diff": "diff_revisions"}[o.operation]; ok {
+		o.operation = alias
+	}
+	if alias, ok := map[string]string{"complete-review": "complete_review", "start-review": "start_review", "edit-preview": "preview_edit", "accept": "accept_item", "reject": "reject_item", "add": "add_comment", "resolve": "resolve_comment", "withdraw": "withdraw_comment"}[o.operation]; ok {
 		o.operation = alias
 	}
 	switch o.operation {
@@ -93,11 +129,47 @@ func parseArgs(args []string) (options, error) {
 			return o, fmt.Errorf("%s requires one Intent path", positionals[0])
 		}
 		o.payload["intent_path"] = positionals[1]
+	case "start_review", "complete_review":
+		if len(positionals) != 2 {
+			return o, fmt.Errorf("%s requires one Intent path", positionals[0])
+		}
+		o.payload["intent_path"] = positionals[1]
+	case "accept_item", "reject_item", "preview_edit", "edit_item":
+		if len(positionals) != 3 {
+			return o, fmt.Errorf("%s requires Intent path and item ID", positionals[0])
+		}
+		o.payload["intent_path"], o.payload["item_id"] = positionals[1], positionals[2]
+	case "add_comment":
+		if len(positionals) != 3 {
+			return o, errors.New("comment add requires Intent path and item ID")
+		}
+		o.payload["intent_path"], o.payload["item_id"] = positionals[1], positionals[2]
+	case "resolve_comment", "withdraw_comment":
+		if len(positionals) != 3 {
+			return o, fmt.Errorf("%s requires Intent path and comment ID", positionals[0])
+		}
+		o.payload["intent_path"], o.payload["comment_id"] = positionals[1], positionals[2]
 	default:
-		return o, fmt.Errorf("unknown command %q", positionals[0])
+		return o, fmt.Errorf("unknown command %q", o.operation)
+	}
+	if modelNeedsActor(o.operation) {
+		actor, err := localActor(o.actorID)
+		if err != nil {
+			return o, err
+		}
+		o.payload["actor"] = actor
 	}
 	o.payload["operation"] = o.operation
 	return o, nil
+}
+
+func modelNeedsActor(operation string) bool {
+	switch operation {
+	case "protocol_info", "show_intent", "validate_intent", "diff_revisions", "preview_edit", "prepare_approval":
+		return false
+	default:
+		return true
+	}
 }
 
 func localActor(fallback string) (map[string]any, error) {
