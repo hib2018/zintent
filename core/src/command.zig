@@ -60,6 +60,12 @@ pub fn capabilityRecord(capability: PreviewCapability, payload_hash: []const u8)
     return .{ .token_id = capability.token_id, .intent_id = capability.intent_id, .expected_revision_id = capability.expected_revision_id, .actor_id = capability.actor_id, .payload_hash = payload_hash, .expires_at_unix = capability.expires_at_unix };
 }
 
+pub fn operationIdentity(operation_id: []const u8, payload: []const u8, digest_out: *[64]u8) !store.OperationIdentity {
+    if (operation_id.len == 0) return error.InvalidOperationIdentity;
+    digest_out.* = hashing.sha256Hex(payload);
+    return .{ .operation_id = operation_id, .command_digest = digest_out };
+}
+
 pub fn capabilityMatches(capability: PreviewCapability, actor_id: []const u8, expected_revision_id: []const u8, item_id: []const u8, before: []const u8, proposed: []const u8, now_unix: i64) bool {
     return capability.expires_at_unix > now_unix and
         std.mem.eql(u8, capability.actor_id, actor_id) and
@@ -126,4 +132,11 @@ test "preview capability binds both statement hashes" {
 test "uuid v7 encodes timestamp, version, and variant" {
     const id = uuidV7(0x0123456789ab, .{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
     try std.testing.expectEqualStrings("01234567-89ab-7001-8203-040506070809", &id);
+}
+
+test "operation identity hashes the exact command payload" {
+    var digest: [64]u8 = undefined;
+    const identity = try operationIdentity("op-1", "{\"item_id\":\"i-1\"}", &digest);
+    try std.testing.expectEqual(@as(usize, 64), identity.command_digest.len);
+    try std.testing.expectError(error.InvalidOperationIdentity, operationIdentity("", "payload", &digest));
 }
