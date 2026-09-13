@@ -1,6 +1,7 @@
 const std = @import("std");
 const model = @import("model.zig");
 const hashing = @import("hashing.zig");
+const store = @import("store.zig");
 
 pub const PreviewCapability = struct {
     token_id: []const u8,
@@ -22,6 +23,20 @@ pub fn deriveProvenance(origin: model.ContentOrigin, actor: model.Actor, operati
 pub fn makePreviewCapability(token_id: []const u8, intent_id: []const u8, expected_revision_id: []const u8, item_id: []const u8, actor_id: []const u8, before: []const u8, proposed: []const u8, expires_at_unix: i64) !PreviewCapability {
     if (token_id.len == 0 or intent_id.len == 0 or expected_revision_id.len == 0 or item_id.len == 0 or actor_id.len == 0 or expires_at_unix <= 0) return error.InvalidCapability;
     return .{ .token_id = token_id, .intent_id = intent_id, .expected_revision_id = expected_revision_id, .item_id = item_id, .actor_id = actor_id, .before_hash = hashing.sha256Hex(before), .proposed_statement_hash = hashing.sha256Hex(proposed), .expires_at_unix = expires_at_unix };
+}
+
+pub fn capabilityRecord(capability: PreviewCapability, payload_hash: []const u8) !store.CapabilityRecord {
+    if (payload_hash.len != 64) return error.InvalidCapability;
+    return .{ .token_id = capability.token_id, .intent_id = capability.intent_id, .expected_revision_id = capability.expected_revision_id, .actor_id = capability.actor_id, .payload_hash = payload_hash, .expires_at_unix = capability.expires_at_unix };
+}
+
+pub fn capabilityMatches(capability: PreviewCapability, actor_id: []const u8, expected_revision_id: []const u8, item_id: []const u8, before: []const u8, proposed: []const u8, now_unix: i64) bool {
+    return capability.expires_at_unix > now_unix and
+        std.mem.eql(u8, capability.actor_id, actor_id) and
+        std.mem.eql(u8, capability.expected_revision_id, expected_revision_id) and
+        std.mem.eql(u8, capability.item_id, item_id) and
+        std.mem.eql(u8, &capability.before_hash, &hashing.sha256Hex(before)) and
+        std.mem.eql(u8, &capability.proposed_statement_hash, &hashing.sha256Hex(proposed));
 }
 
 pub const Command = struct {
@@ -73,4 +88,7 @@ test "preview capability binds both statement hashes" {
     try std.testing.expectEqual(@as(usize, 64), capability.before_hash.len);
     try std.testing.expectEqual(@as(usize, 64), capability.proposed_statement_hash.len);
     try std.testing.expectError(error.InvalidCapability, makePreviewCapability("", "intent", "rev", "item", "alice", "before", "after", 100));
+    try std.testing.expect(capabilityMatches(capability, "alice", "rev", "item", "before", "after", 99));
+    try std.testing.expect(!capabilityMatches(capability, "alice", "rev", "item", "changed", "after", 99));
+    try std.testing.expect(!capabilityMatches(capability, "alice", "rev", "item", "before", "after", 100));
 }
