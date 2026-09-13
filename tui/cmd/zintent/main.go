@@ -177,6 +177,20 @@ func parseArgs(args []string) (options, error) {
 		}
 		o.payload["actor"] = actor
 	}
+	for source, target := range map[string]string{"statement_file": "statement", "reason_file": "rationale", "body_file": "body"} {
+		if value, ok := o.payload[source]; ok {
+			path, ok := value.(string)
+			if !ok {
+				return o, fmt.Errorf("%s must be a path", source)
+			}
+			contents, err := os.ReadFile(path)
+			if err != nil {
+				return o, fmt.Errorf("read %s: %w", source, err)
+			}
+			o.payload[target] = string(contents)
+			delete(o.payload, source)
+		}
+	}
 	o.payload["operation"] = o.operation
 	return o, nil
 }

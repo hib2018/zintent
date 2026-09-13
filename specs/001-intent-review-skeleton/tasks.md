@@ -88,10 +88,10 @@ stale or invalid actions create no reachable revision. Deep chain inspection rem
 
 - [X] T028 [P] [US1] Implement strict Intent revision decoding and structural/referential validation in core/src/validation.zig
 - [X] T029 [P] [US1] Implement Draft, Intent Item, Comment, Revision, and HEAD manifest domain constructors in core/src/model.zig
-- [ ] T030 [US1] Implement start_review, accept_item, preview_edit, capability-bound edit_item, reject_item, add_comment, resolve_comment, and withdraw_comment transition rules in core/src/transition.zig
+- [X] T030 [US1] Implement start_review, accept_item, preview_edit, capability-bound edit_item, reject_item, add_comment, resolve_comment, and withdraw_comment transition rules in core/src/transition.zig
 - [ ] T031 [US1] Implement independent ContentOrigin plus mechanically derived human OperationActor provenance, UUID v7 allocation, operation idempotency, capability issuance/consumption, and parent revision creation in core/src/command.zig
 - [ ] T032 [US1] Integrate review mutations with lock/revalidate/publish/HEAD-last storage flow and verified HEAD loading needed to reopen the current review in core/src/store.zig and core/src/main.zig
-- [ ] T033 [P] [US1] Implement Go CLI subcommands for validate, show, item accept/edit-preview/edit/reject, and comment add/resolve/withdraw, requiring the preview token on edit apply, in tui/internal/command/review.go
+- [X] T033 [P] [US1] Implement Go CLI subcommands for validate, show, item accept/edit-preview/edit/reject, and comment add/resolve/withdraw, requiring the preview token on edit apply, in tui/internal/command/review.go
 - [X] T034 [P] [US1] Implement the pure Bubble Tea review model, messages, and update reducer with no filesystem mutation in tui/internal/ui/review.go
 - [X] T035 [US1] Implement Hunk-style header, item list, before/after detail, findings footer, narrow layout, and keyboard help in tui/internal/ui/view.go
 - [ ] T036 [US1] Connect TUI edit preview and all confirmed actions to the bounded Zig runner, consume the exact preview token, reload canonical state after success, and never replay stale mutations in tui/internal/ui/commands.go

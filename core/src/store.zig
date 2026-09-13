@@ -58,7 +58,7 @@ pub const Lock = struct {
 };
 
 pub fn acquireLock(io: std.Io, path: []const u8) !Lock {
-    std.Io.Dir.cwd().createDir(io, path, .{}) catch |err| return switch (err) {
+    std.Io.Dir.cwd().createDir(io, path, .default_dir) catch |err| return switch (err) {
         error.PathAlreadyExists => error.IntentLocked,
         else => err,
     };

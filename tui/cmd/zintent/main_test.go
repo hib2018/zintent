@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestParseReadOnlyCommands(t *testing.T) {
 	o, err := parseArgs([]string{"show", "intent", "--output", "json", "--core", "core"})
@@ -42,11 +46,15 @@ func TestParseMutationCommandSurface(t *testing.T) {
 }
 
 func TestParseCommentCommandSurface(t *testing.T) {
-	o, err := parseArgs([]string{"comment", "add", "intent", "i-1", "--body-file", "comment.txt", "--expected-revision", "r-1", "--operation-id", "op-1", "--actor-id", "alice"})
+	bodyPath := filepath.Join(t.TempDir(), "comment.txt")
+	if err := os.WriteFile(bodyPath, []byte("comment"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	o, err := parseArgs([]string{"comment", "add", "intent", "i-1", "--body-file", bodyPath, "--expected-revision", "r-1", "--operation-id", "op-1", "--actor-id", "alice"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if o.operation != "add_comment" || o.payload["comment_id"] != nil || o.payload["body_file"] != "comment.txt" {
+	if o.operation != "add_comment" || o.payload["comment_id"] != nil || o.payload["body"] != "comment" {
 		t.Fatalf("unexpected comment command: %#v", o)
 	}
 }
