@@ -57,23 +57,5 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() tea.View {
-	if m.Quitting {
-		return tea.NewView("Review closed.\n")
-	}
-	s := "zintent  " + m.Lifecycle + "  rev:" + m.Revision + "  actor:" + m.Actor + "\n\n"
-	for i, item := range m.Items {
-		cursor := "  "
-		if i == m.Selected {
-			cursor = "> "
-		}
-		s += cursor + item.ID + " [" + item.Status + "] " + item.Statement + "\n"
-	}
-	if m.Modal != "" {
-		s += "\nConfirm " + m.Modal + " for " + m.Items[m.Selected].ID + "? Enter=confirm Esc=cancel\n"
-	}
-	if m.Status != "" {
-		s += "\n" + m.Status + "\n"
-	}
-	s += "\n↑/↓ j/k navigate  a accept  e edit  c comment  x reject  q quit\n"
-	return tea.NewView(s)
+	return renderView(m)
 }
