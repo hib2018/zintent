@@ -14,6 +14,36 @@ pub const PreviewCapability = struct {
     expires_at_unix: i64,
 };
 
+const hex = "0123456789abcdef";
+
+/// Formats a UUID version 7 from a millisecond timestamp and ten random bytes.
+/// The random input is supplied by the caller so production code can use the
+/// OS CSPRNG while tests remain deterministic.
+pub fn uuidV7(timestamp_ms: u64, random: [10]u8) [36]u8 {
+    var bytes: [16]u8 = undefined;
+    bytes[0] = @truncate(timestamp_ms >> 40);
+    bytes[1] = @truncate(timestamp_ms >> 32);
+    bytes[2] = @truncate(timestamp_ms >> 24);
+    bytes[3] = @truncate(timestamp_ms >> 16);
+    bytes[4] = @truncate(timestamp_ms >> 8);
+    bytes[5] = @truncate(timestamp_ms);
+    @memcpy(bytes[6..], &random);
+    bytes[6] = (bytes[6] & 0x0f) | 0x70;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    var out: [36]u8 = undefined;
+    var oi: usize = 0;
+    for (bytes, 0..) |byte, i| {
+        out[oi] = hex[byte >> 4];
+        out[oi + 1] = hex[byte & 0x0f];
+        oi += 2;
+        if (i == 3 or i == 5 or i == 7 or i == 9) {
+            out[oi] = '-';
+            oi += 1;
+        }
+    }
+    return out;
+}
+
 pub fn deriveProvenance(origin: model.ContentOrigin, actor: model.Actor, operation_id: []const u8, operation_type: []const u8, revision_id: []const u8, source_reference_ids: []const []const u8) !model.Provenance {
     try actor.validate();
     if (operation_id.len == 0 or operation_type.len == 0 or revision_id.len == 0) return error.InvalidProvenance;
@@ -91,4 +121,9 @@ test "preview capability binds both statement hashes" {
     try std.testing.expect(capabilityMatches(capability, "alice", "rev", "item", "before", "after", 99));
     try std.testing.expect(!capabilityMatches(capability, "alice", "rev", "item", "changed", "after", 99));
     try std.testing.expect(!capabilityMatches(capability, "alice", "rev", "item", "before", "after", 100));
+}
+
+test "uuid v7 encodes timestamp, version, and variant" {
+    const id = uuidV7(0x0123456789ab, .{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
+    try std.testing.expectEqualStrings("01234567-89ab-7001-8203-040506070809", &id);
 }
