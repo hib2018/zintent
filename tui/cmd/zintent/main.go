@@ -11,9 +11,11 @@ import (
 	"strings"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/hib2018/zintent/tui/internal/output"
 	"github.com/hib2018/zintent/tui/internal/protocol"
 	"github.com/hib2018/zintent/tui/internal/runner"
+	"github.com/hib2018/zintent/tui/internal/ui"
 )
 
 func main() {
@@ -36,7 +38,7 @@ func run(args []string) error {
 		return exitError{5, errors.New("tty_required: review requires an interactive terminal")}
 	}
 	if parsed.interactive {
-		return exitError{70, errors.New("operation_unavailable: interactive review is not implemented yet")}
+		return runReview(context.Background(), parsed)
 	}
 	request := protocol.Request{ProtocolVersion: protocol.Version, RequestID: fmt.Sprintf("cli-%d", time.Now().UnixNano()), Operation: parsed.operation, PayloadSchema: "zintent.command/1", Payload: payload}
 	response, err := (runner.Core{Executable: parsed.corePath}).Run(context.Background(), request)
@@ -50,6 +52,60 @@ func run(args []string) error {
 		return exitError{errorExit(response.Error.Code), errors.New(response.Error.Message)}
 	}
 	return nil
+}
+
+func runReview(ctx context.Context, parsed options) error {
+	core := runner.Core{Executable: parsed.corePath}
+	payload, err := json.Marshal(map[string]any{"operation": "show_intent", "intent_path": parsed.payload["intent_path"]})
+	if err != nil {
+		return err
+	}
+	response, err := core.Run(ctx, protocol.Request{ProtocolVersion: protocol.Version, RequestID: fmt.Sprintf("review-%d", time.Now().UnixNano()), Operation: "show_intent", PayloadSchema: "zintent.command/1", Payload: payload})
+	if err != nil {
+		return err
+	}
+	if !response.OK {
+		if response.Error != nil {
+			return exitError{errorExit(response.Error.Code), errors.New(response.Error.Message)}
+		}
+		return errors.New("show_intent failed")
+	}
+	var result struct {
+		Data struct {
+			Intent struct {
+				IntentID        string `json:"intent_id"`
+				RevisionID      string `json:"revision_id"`
+				Lifecycle       string `json:"lifecycle_state"`
+				RevisionPayload struct {
+					Items []struct {
+						ID        string `json:"item_id"`
+						Kind      string `json:"kind"`
+						Statement string `json:"statement"`
+						Status    string `json:"review_status"`
+					} `json:"items"`
+				} `json:"revision_payload"`
+			} `json:"intent"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(response.Result, &result); err != nil {
+		return err
+	}
+	items := make([]ui.Item, 0, len(result.Data.Intent.RevisionPayload.Items))
+	for _, item := range result.Data.Intent.RevisionPayload.Items {
+		items = append(items, ui.Item{ID: item.ID, Kind: item.Kind, Statement: item.Statement, Status: item.Status})
+	}
+	actor, _ := parsed.payload["actor"].(map[string]any)
+	actorID, _ := actor["actor_id"].(string)
+	model := ui.New(items)
+	model.IntentID = result.Data.Intent.IntentID
+	model.Revision = result.Data.Intent.RevisionID
+	model.Lifecycle = result.Data.Intent.Lifecycle
+	model.Actor = actorID
+	model.IntentPath, _ = parsed.payload["intent_path"].(string)
+	model.ExpectedRevision = model.Revision
+	model.Executor = &ui.CoreCommands{Core: core, IntentPath: model.IntentPath, Expected: model.ExpectedRevision, Actor: actor}
+	_, err = tea.NewProgram(model).Run()
+	return err
 }
 
 func stdinIsTerminal() bool {
@@ -128,6 +184,9 @@ func parseArgs(args []string) (options, error) {
 	if alias, ok := map[string]string{"show": "show_intent", "validate": "validate_intent", "diff": "diff_revisions"}[o.operation]; ok {
 		o.operation = alias
 	}
+	if alias, ok := map[string]string{"edit-preview_item": "preview_edit", "accept_item": "accept_item", "reject_item": "reject_item"}[o.operation]; ok {
+		o.operation = alias
+	}
 	if alias, ok := map[string]string{"complete-review": "complete_review", "start-review": "start_review", "edit-preview": "preview_edit", "accept": "accept_item", "reject": "reject_item", "add": "add_comment", "resolve": "resolve_comment", "withdraw": "withdraw_comment"}[o.operation]; ok {
 		o.operation = alias
 	}
@@ -197,7 +256,7 @@ func parseArgs(args []string) (options, error) {
 
 func modelNeedsActor(operation string) bool {
 	switch operation {
-	case "protocol_info", "show_intent", "validate_intent", "diff_revisions", "preview_edit", "prepare_approval":
+	case "protocol_info", "show_intent", "validate_intent", "diff_revisions", "prepare_approval":
 		return false
 	default:
 		return true

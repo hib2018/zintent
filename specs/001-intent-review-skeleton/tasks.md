@@ -79,10 +79,10 @@ stale or invalid actions create no reachable revision. Deep chain inspection rem
 - [X] T021 [P] [US1] Write failing typed-decoding, duplicate-ID, broken-reference, empty-statement, and rejected-rationale tests in core/tests/model_validation.zig
 - [X] T022 [P] [US1] Write failing draft-to-review and item/comment transition table tests in core/tests/transition.zig
 - [X] T023 [P] [US1] Write failing stale-revision, idempotent-retry, operation-ID conflict, and no-partial-publication tests in core/tests/persistence_failure.zig
-- [ ] T024 [P] [US1] Write failing public CLI JSON-envelope tests for validate, show, item actions, comment actions, and complete-review syntax in tests/integration/review_cli_test.go
-- [ ] T025 [P] [US1] Write failing Bubble Tea reducer tests for navigation, modal cancellation, confirmation, stable-ID selection, resize, and stale reload in tui/internal/ui/review_test.go
-- [ ] T026 [P] [US1] Write failing 80x24, narrow, monochrome, long-statement, and empty-findings render tests in tui/internal/ui/view_test.go
-- [ ] T027 [US1] Write the failing end-to-end accept/edit-preview/edit/comment/resolve/reject/quit/reopen-from-HEAD journey in tests/integration/review_journey_test.go
+- [X] T024 [P] [US1] Write failing public CLI JSON-envelope tests for validate, show, item actions, comment actions, and complete-review syntax in tests/integration/review_cli_test.go
+- [X] T025 [P] [US1] Write failing Bubble Tea reducer tests for navigation, modal cancellation, confirmation, stable-ID selection, resize, and stale reload in tui/internal/ui/review_test.go
+- [X] T026 [P] [US1] Write failing 80x24, narrow, monochrome, long-statement, and empty-findings render tests in tui/internal/ui/view_test.go
+- [X] T027 [US1] Write the failing end-to-end accept/edit-preview/edit/comment/resolve/reject/quit/reopen-from-HEAD journey in tests/integration/review_journey_test.go
 
 ### Implementation for User Story 1
 
@@ -94,8 +94,8 @@ stale or invalid actions create no reachable revision. Deep chain inspection rem
 - [X] T033 [P] [US1] Implement Go CLI subcommands for validate, show, item accept/edit-preview/edit/reject, and comment add/resolve/withdraw, requiring the preview token on edit apply, in tui/internal/command/review.go
 - [X] T034 [P] [US1] Implement the pure Bubble Tea review model, messages, and update reducer with no filesystem mutation in tui/internal/ui/review.go
 - [X] T035 [US1] Implement Hunk-style header, item list, before/after detail, findings footer, narrow layout, and keyboard help in tui/internal/ui/view.go
-- [ ] T036 [US1] Connect TUI edit preview and all confirmed actions to the bounded Zig runner, consume the exact preview token, reload canonical state after success, and never replay stale mutations in tui/internal/ui/commands.go
-- [ ] T037 [US1] Implement verified HEAD reopening, immediate persistence, safe quit summary, terminal restoration, and TTY refusal behavior in tui/cmd/zintent/main.go
+- [X] T036 [US1] Connect TUI edit preview and all confirmed actions to the bounded Zig runner, consume the exact preview token, reload canonical state after success, and never replay stale mutations in tui/internal/ui/commands.go
+- [X] T037 [US1] Implement verified HEAD reopening, immediate persistence, safe quit summary, terminal restoration, and TTY refusal behavior in tui/cmd/zintent/main.go
 - [ ] T038 [US1] Create .agents/skills/zintent-catalog.md and register the zintent-review skill; create its explicit artifact contract, allowed CLI calls, exclusions, and blocker summary behavior in .agents/skills/zintent-review/SKILL.md
 
 **Checkpoint**: User Story 1 is a usable MVP for item-level human intervention and is independently
