@@ -32,6 +32,12 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
+	if parsed.interactive && !stdinIsTerminal() {
+		return exitError{5, errors.New("tty_required: review requires an interactive terminal")}
+	}
+	if parsed.interactive {
+		return exitError{70, errors.New("operation_unavailable: interactive review is not implemented yet")}
+	}
 	request := protocol.Request{ProtocolVersion: protocol.Version, RequestID: fmt.Sprintf("cli-%d", time.Now().UnixNano()), Operation: parsed.operation, PayloadSchema: "zintent.command/1", Payload: payload}
 	response, err := (runner.Core{Executable: parsed.corePath}).Run(context.Background(), request)
 	if err != nil {
@@ -46,10 +52,16 @@ func run(args []string) error {
 	return nil
 }
 
+func stdinIsTerminal() bool {
+	info, err := os.Stdin.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
+}
+
 type options struct {
 	operation, corePath string
 	jsonMode            bool
 	actorID             string
+	interactive         bool
 	payload             map[string]any
 }
 
@@ -133,6 +145,12 @@ func parseArgs(args []string) (options, error) {
 		if len(positionals) != 2 {
 			return o, fmt.Errorf("%s requires one Intent path", positionals[0])
 		}
+		o.payload["intent_path"] = positionals[1]
+	case "review":
+		if len(positionals) != 2 {
+			return o, errors.New("review requires one Intent path")
+		}
+		o.interactive = true
 		o.payload["intent_path"] = positionals[1]
 	case "accept_item", "reject_item", "preview_edit", "edit_item":
 		if len(positionals) != 3 {
