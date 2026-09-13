@@ -31,6 +31,18 @@ pub fn approvalEligible(items: []const model.Item, comments: []const model.Comme
     return true;
 }
 
+pub fn completeReview(items: []const model.Item, comments: []const model.Comment) !void {
+    if (items.len == 0) return error.NoIncludedItems;
+    var included: usize = 0;
+    for (items) |item| {
+        if (!item.included_in_approval) continue;
+        included += 1;
+        if (item.review_status == .unreviewed) return error.UnreviewedItem;
+    }
+    if (included == 0) return error.NoIncludedItems;
+    for (comments) |comment| if (comment.status == .open) return error.OpenComment;
+}
+
 /// Validates the structural portion of an Intent revision without applying
 /// any lifecycle transition. Full JSON-schema validation remains at the
 /// protocol boundary; this function enforces the invariants needed by the
@@ -86,4 +98,15 @@ test "revision parser rejects unsupported schema and unknown fields" {
     const invalid = try std.mem.replaceOwned(u8, allocator, valid, "1.0.0", "2.0.0");
     defer allocator.free(invalid);
     try std.testing.expectError(error.UnsupportedSchema, parseRevision(allocator, invalid));
+}
+
+test "review completion blocks unreviewed items and open comments" {
+    const provenance = model.Provenance{ .content_origin = .source, .operation_id = "op", .operation_type = "draft", .revision_id = "rev" };
+    var items = [_]model.Item{.{ .item_id = "i-1", .kind = "goal", .statement = "goal", .provenance = provenance }};
+    try std.testing.expectError(error.UnreviewedItem, completeReview(&items, &.{}));
+    items[0].review_status = .accepted;
+    var comments = [_]model.Comment{.{ .comment_id = "c-1", .target_item_id = "i-1", .body = "question", .author = .{ .actor_id = "alice", .identity_source = "explicit_fallback" }, .created_revision_id = "rev" }};
+    try std.testing.expectError(error.OpenComment, completeReview(&items, &comments));
+    comments[0].status = .resolved;
+    try completeReview(&items, &comments);
 }

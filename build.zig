@@ -66,4 +66,13 @@ pub fn build(b: *std.Build) void {
         }),
     });
     test_step.dependOn(&b.addRunArtifact(persistence_failure_tests).step);
+    const approval_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("core/tests/approval.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "zintent_core", .module = core }},
+        }),
+    });
+    test_step.dependOn(&b.addRunArtifact(approval_tests).step);
 }
