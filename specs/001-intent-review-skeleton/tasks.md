@@ -78,7 +78,7 @@ stale or invalid actions create no reachable revision. Deep chain inspection rem
 
 - [X] T021 [P] [US1] Write failing typed-decoding, duplicate-ID, broken-reference, empty-statement, and rejected-rationale tests in core/tests/model_validation.zig
 - [X] T022 [P] [US1] Write failing draft-to-review and item/comment transition table tests in core/tests/transition.zig
-- [ ] T023 [P] [US1] Write failing stale-revision, idempotent-retry, operation-ID conflict, and no-partial-publication tests in core/tests/persistence_failure.zig
+- [X] T023 [P] [US1] Write failing stale-revision, idempotent-retry, operation-ID conflict, and no-partial-publication tests in core/tests/persistence_failure.zig
 - [ ] T024 [P] [US1] Write failing public CLI JSON-envelope tests for validate, show, item actions, comment actions, and complete-review syntax in tests/integration/review_cli_test.go
 - [ ] T025 [P] [US1] Write failing Bubble Tea reducer tests for navigation, modal cancellation, confirmation, stable-ID selection, resize, and stale reload in tui/internal/ui/review_test.go
 - [ ] T026 [P] [US1] Write failing 80x24, narrow, monochrome, long-statement, and empty-findings render tests in tui/internal/ui/view_test.go

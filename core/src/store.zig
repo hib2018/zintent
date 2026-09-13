@@ -1,5 +1,15 @@
 const std = @import("std");
 
+pub fn checkExpectedRevision(expected: []const u8, current: []const u8) !void {
+    if (!std.mem.eql(u8, expected, current)) return error.StaleRevision;
+}
+
+pub fn checkOperationRetry(existing_operation_id: []const u8, existing_payload_hash: []const u8, incoming_operation_id: []const u8, incoming_payload_hash: []const u8) !bool {
+    if (!std.mem.eql(u8, existing_operation_id, incoming_operation_id)) return false;
+    if (!std.mem.eql(u8, existing_payload_hash, incoming_payload_hash)) return error.OperationIdConflict;
+    return true;
+}
+
 pub const Head = struct {
     schema_version: []const u8 = "1.0.0",
     intent_id: []const u8,
@@ -16,6 +26,26 @@ pub fn newHead(intent_id: []const u8, revision_id: []const u8, revision_hash: []
 pub fn verifyHead(head: Head) !void {
     if (head.intent_id.len == 0 or head.current_revision_id.len == 0 or head.current_revision_hash.len != 64)
         return error.InvalidHead;
+}
+
+pub fn requireExpectedRevision(head: Head, expected_revision_id: []const u8) !void {
+    try verifyHead(head);
+    if (!std.mem.eql(u8, head.current_revision_id, expected_revision_id)) return error.StaleRevision;
+}
+
+pub const OperationIdentity = struct {
+    operation_id: []const u8,
+    command_digest: []const u8,
+};
+
+pub const RetryDisposition = enum { new_operation, identical_retry };
+
+pub fn classifyOperationRetry(existing: ?OperationIdentity, incoming: OperationIdentity) !RetryDisposition {
+    if (incoming.operation_id.len == 0 or incoming.command_digest.len != 64) return error.InvalidOperationIdentity;
+    const prior = existing orelse return .new_operation;
+    if (!std.mem.eql(u8, prior.operation_id, incoming.operation_id)) return .new_operation;
+    if (!std.mem.eql(u8, prior.command_digest, incoming.command_digest)) return error.OperationIdConflict;
+    return .identical_retry;
 }
 
 pub const Lock = struct {
@@ -123,6 +153,17 @@ test "HEAD requires content identity" {
         .current_revision_hash = "bad",
         .lifecycle_state = "draft",
     }));
+}
+
+test "stale revisions are rejected before publication" {
+    try checkExpectedRevision("r-1", "r-1");
+    try std.testing.expectError(error.StaleRevision, checkExpectedRevision("r-0", "r-1"));
+}
+
+test "operation retries are idempotent but content conflicts are refused" {
+    try std.testing.expect(try checkOperationRetry("op-1", "hash", "op-1", "hash"));
+    try std.testing.expect(!(try checkOperationRetry("op-1", "hash", "op-2", "hash")));
+    try std.testing.expectError(error.OperationIdConflict, checkOperationRetry("op-1", "hash", "op-1", "different"));
 }
 
 test "atomic publication writes complete bytes and refuses exclusive overwrite" {
