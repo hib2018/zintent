@@ -13,6 +13,9 @@ type Model struct {
 	Width, Height                        int
 	Findings                             []string
 	Quitting                             bool
+	Modal                                string
+	PendingAction                        string
+	Status                               string
 }
 
 func New(items []Item) Model { return Model{Items: items, Lifecycle: "draft"} }
@@ -34,6 +37,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.Selected > 0 {
 				m.Selected--
 			}
+		case "a", "e", "c", "x":
+			if len(m.Items) > 0 {
+				m.PendingAction = map[string]string{"a": "accept", "e": "edit-preview", "c": "comment", "x": "reject"}[msg.String()]
+				m.Modal = m.PendingAction
+			}
+		case "enter":
+			if m.Modal != "" {
+				m.Status = m.PendingAction + " confirmed for " + m.Items[m.Selected].ID
+				m.Modal, m.PendingAction = "", ""
+			}
+		case "esc":
+			m.Modal, m.PendingAction = "", ""
 		}
 	case tea.WindowSizeMsg:
 		m.Width, m.Height = msg.Width, msg.Height
@@ -52,6 +67,12 @@ func (m Model) View() tea.View {
 			cursor = "> "
 		}
 		s += cursor + item.ID + " [" + item.Status + "] " + item.Statement + "\n"
+	}
+	if m.Modal != "" {
+		s += "\nConfirm " + m.Modal + " for " + m.Items[m.Selected].ID + "? Enter=confirm Esc=cancel\n"
+	}
+	if m.Status != "" {
+		s += "\n" + m.Status + "\n"
 	}
 	s += "\n↑/↓ j/k navigate  a accept  e edit  c comment  x reject  q quit\n"
 	return tea.NewView(s)

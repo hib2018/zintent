@@ -26,3 +26,22 @@ func TestViewContainsReviewContext(t *testing.T) {
 		t.Fatal("empty view")
 	}
 }
+
+func TestReviewModalCanCancelAndConfirm(t *testing.T) {
+	m := New([]Item{{ID: "i1"}})
+	next, _ := m.Update(tea.KeyPressMsg(tea.Key{Text: "a", Code: 'a'}))
+	got := next.(Model)
+	if got.Modal != "accept" || got.PendingAction != "accept" {
+		t.Fatalf("expected accept modal: %#v", got)
+	}
+	next, _ = got.Update(tea.KeyPressMsg(tea.Key{Text: "esc", Code: 27}))
+	got = next.(Model)
+	if got.Modal != "" || got.Status != "" {
+		t.Fatalf("escape should cancel modal: %#v", got)
+	}
+	next, _ = got.Update(tea.KeyPressMsg(tea.Key{Text: "x", Code: 'x'}))
+	next, _ = next.(Model).Update(tea.KeyPressMsg(tea.Key{Text: "enter", Code: 13}))
+	if next.(Model).Status != "reject confirmed for i1" {
+		t.Fatalf("expected confirmation status: %#v", next.(Model))
+	}
+}

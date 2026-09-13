@@ -92,7 +92,7 @@ stale or invalid actions create no reachable revision. Deep chain inspection rem
 - [ ] T031 [US1] Implement independent ContentOrigin plus mechanically derived human OperationActor provenance, UUID v7 allocation, operation idempotency, capability issuance/consumption, and parent revision creation in core/src/command.zig
 - [ ] T032 [US1] Integrate review mutations with lock/revalidate/publish/HEAD-last storage flow and verified HEAD loading needed to reopen the current review in core/src/store.zig and core/src/main.zig
 - [ ] T033 [P] [US1] Implement Go CLI subcommands for validate, show, item accept/edit-preview/edit/reject, and comment add/resolve/withdraw, requiring the preview token on edit apply, in tui/internal/command/review.go
-- [ ] T034 [P] [US1] Implement the pure Bubble Tea review model, messages, and update reducer with no filesystem mutation in tui/internal/ui/review.go
+- [X] T034 [P] [US1] Implement the pure Bubble Tea review model, messages, and update reducer with no filesystem mutation in tui/internal/ui/review.go
 - [ ] T035 [US1] Implement Hunk-style header, item list, before/after detail, findings footer, narrow layout, and keyboard help in tui/internal/ui/view.go
 - [ ] T036 [US1] Connect TUI edit preview and all confirmed actions to the bounded Zig runner, consume the exact preview token, reload canonical state after success, and never replay stale mutations in tui/internal/ui/commands.go
 - [ ] T037 [US1] Implement verified HEAD reopening, immediate persistence, safe quit summary, terminal restoration, and TTY refusal behavior in tui/cmd/zintent/main.go
