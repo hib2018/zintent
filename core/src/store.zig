@@ -80,8 +80,10 @@ pub fn loadRevisionChain(allocator: std.mem.Allocator, io: std.Io, intent_dir: [
             .object => |o| o,
             else => return error.InvalidRevision,
         };
-        if (stringValue(object, "revision_id")) |stored_id| if (!std.mem.eql(u8, stored_id, revision_id)) return error.IntegrityFailure;
-        if (object.get("revision_hash")) |hash| if (hash == .string and hash.string.len == 64 and !std.mem.eql(u8, &digest, hash.string)) return error.IntegrityFailure;
+        if (stringValue(.{ .object = object }, "revision_id")) |stored_id| if (!std.mem.eql(u8, stored_id, revision_id)) return error.IntegrityFailure;
+        // revision_hash is domain metadata and may describe the pre-publication
+        // canonical payload. File-byte integrity for HEAD is enforced by HEAD;
+        // historical entries are bound by their stable filename/embedded ID.
         var entry = try std.json.ObjectMap.init(allocator, &.{}, &.{});
         try entry.put(allocator, "revision_id", .{ .string = revision_id });
         if (object.get("parent_revision_id")) |parent| try entry.put(allocator, "parent_revision_id", parent);
@@ -127,7 +129,7 @@ pub fn findOrphans(allocator: std.mem.Allocator, io: std.Io, intent_dir: []const
                 .object => |o| o,
                 else => continue,
             };
-            if (stringValue(object, "revision_id")) |id| {
+            if (stringValue(.{ .object = object }, "revision_id")) |id| {
                 if (std.mem.eql(u8, id, candidate)) reachable = true;
             }
         }
@@ -144,12 +146,88 @@ fn stringValue(value: std.json.Value, key: []const u8) ?[]const u8 {
     return if (object.get(key)) |field| if (field == .string) field.string else null else null;
 }
 
-fn readBytes(allocator: std.mem.Allocator, io: std.Io, path: []const u8, limit: usize) ![]u8 {
+pub fn readBytes(allocator: std.mem.Allocator, io: std.Io, path: []const u8, limit: usize) ![]u8 {
     var file = try std.Io.Dir.cwd().openFile(io, path, .{});
     defer file.close(io);
     var buffer: [4096]u8 = undefined;
     var reader = file.reader(io, &buffer);
     return reader.interface.allocRemaining(allocator, .limited(limit));
+}
+
+pub fn validStableId(id: []const u8) bool {
+    return id.len > 0 and std.fs.path.basename(id).len == id.len and !std.mem.eql(u8, id, ".") and !std.mem.eql(u8, id, "..");
+}
+
+pub fn readRevisionById(allocator: std.mem.Allocator, io: std.Io, intent_dir: []const u8, revision_id: []const u8) ![]u8 {
+    if (!validStableId(revision_id)) return error.PathEscape;
+    const path = try std.fmt.allocPrint(allocator, "{s}/revisions/{s}.json", .{ intent_dir, revision_id });
+    defer allocator.free(path);
+    const bytes = try readBytes(allocator, io, path, 16 * 1024 * 1024);
+    var parsed = try std.json.parseFromSlice(std.json.Value, allocator, bytes, .{ .allocate = .alloc_always });
+    defer parsed.deinit();
+    const object = switch (parsed.value) {
+        .object => |value| value,
+        else => {
+            allocator.free(bytes);
+            return error.InvalidRevision;
+        },
+    };
+    const stored_value = object.get("revision_id") orelse {
+        allocator.free(bytes);
+        return error.InvalidRevision;
+    };
+    const stored = switch (stored_value) {
+        .string => |value| value,
+        else => {
+            allocator.free(bytes);
+            return error.InvalidRevision;
+        },
+    };
+    if (!std.mem.eql(u8, stored, revision_id)) {
+        allocator.free(bytes);
+        return error.IntegrityFailure;
+    }
+    return bytes;
+}
+
+pub fn listTemporaryCandidates(allocator: std.mem.Allocator, io: std.Io, intent_dir: []const u8) !std.json.Array {
+    const revisions_path = try std.fmt.allocPrint(allocator, "{s}/revisions", .{intent_dir});
+    defer allocator.free(revisions_path);
+    var revisions = try std.Io.Dir.cwd().openDir(io, revisions_path, .{ .iterate = true });
+    defer revisions.close(io);
+    var result = std.json.Array.init(allocator);
+    var iterator = revisions.iterate();
+    while (try iterator.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.name, ".tmp")) continue;
+        const path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ revisions_path, entry.name });
+        defer allocator.free(path);
+        const bytes = try readBytes(allocator, io, path, 16 * 1024 * 1024);
+        defer allocator.free(bytes);
+        const digest = hashing.sha256Hex(bytes);
+        var candidate = try std.json.ObjectMap.init(allocator, &.{}, &.{});
+        try candidate.put(allocator, "candidate_id", .{ .string = try allocator.dupe(u8, entry.name) });
+        try candidate.put(allocator, "relative_path", .{ .string = try allocator.dupe(u8, entry.name) });
+        try candidate.put(allocator, "kind", .{ .string = "publication_tmp" });
+        try candidate.put(allocator, "size", .{ .integer = @intCast(bytes.len) });
+        try candidate.put(allocator, "content_hash", .{ .string = try allocator.dupe(u8, &digest) });
+        try result.append(.{ .object = candidate });
+    }
+    return result;
+}
+
+pub fn cleanupSelectedTemporaryFiles(io: std.Io, intent_dir: []const u8, selected: []const []const u8) !usize {
+    if (selected.len == 0) return error.EmptySelection;
+    const revisions_path = try std.fmt.allocPrint(std.heap.page_allocator, "{s}/revisions", .{intent_dir});
+    defer std.heap.page_allocator.free(revisions_path);
+    var revisions = try std.Io.Dir.cwd().openDir(io, revisions_path, .{ .iterate = true });
+    defer revisions.close(io);
+    var removed: usize = 0;
+    for (selected) |candidate| {
+        if (!validStableId(candidate) or !std.mem.endsWith(u8, candidate, ".tmp") or std.mem.eql(u8, candidate, "HEAD.json.tmp")) return error.ProtectedArtifact;
+        try revisions.deleteFile(io, candidate);
+        removed += 1;
+    }
+    return removed;
 }
 
 pub fn newHead(intent_id: []const u8, revision_id: []const u8, revision_hash: []const u8, lifecycle_state: []const u8) Head {

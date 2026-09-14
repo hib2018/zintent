@@ -22,9 +22,18 @@ zintent item accept PATH ITEM_ID --expected-revision REV --operation-id OP --act
 zintent complete-review PATH --expected-revision REV --operation-id OP --actor-id NAME
 zintent review PATH
 zintent approve PATH --revision REV --operation-id OP --actor-id NAME
+zintent workspace WORKSPACE_DIR
 ```
 
 `approve` は `/dev/tty` からchallengeを読み、非TTYやstdinによる代替確認を拒否します。
+
+## 全画面ワークスペース
+
+`zintent workspace WORKSPACE_DIR` は、指定ディレクトリの直下にある複数のIntentを一覧・検索し、レビュー、承認、監査、復旧までを一つのalternate-screen TUIで扱います。サブディレクトリの再帰探索やsymlink追跡は行いません。破損したIntentはfindingとして表示され、開くことはできません。
+
+Intent一覧では `/` で検索、`n` で既存Draft JSONの取込、`Enter` で選択Intentをcanonical stateから開きます。取込はsource hash、coreが提案したID・保存先、findingを確認してから確定します。元Draftは変更されず、失敗時に部分的なIntentは公開されません。
+
+画面は `Intent list → Dashboard → Review / Comments / Completion / Approval / History / Validation / Snapshot / Recovery` の構成です。共通キーは `Esc` 戻る、`q` 終了、`r/c/f/p/h/v/s/R` が各画面への移動です。入力中は`Esc`で取消し、確定操作は`Enter`で行います。Approvalはfresh challengeの完全一致を必要とし、Recoveryは観測後に変化していない一時ファイルだけを削除します。
 
 ## Storeレイアウトと復旧
 
@@ -40,7 +49,7 @@ zintent approve PATH --revision REV --operation-id OP --actor-id NAME
 
 ## 開発
 
-仕様とタスクは `specs/001-intent-review-skeleton/`、skillsは `.agents/skills/` にあります。CLI/TUIがIntent JSONを直接変更することは禁止され、永続的な変更はcore protocol経由で行います。
+仕様とタスクは `specs/001-intent-review-skeleton/` と `specs/002-fullscreen-tui-workspace/`、skillsは `.agents/skills/` にあります。CLI/TUIがIntent JSONを直接変更することは禁止され、永続的な変更はcore protocol経由で行います。
 
 ## ドキュメント
 

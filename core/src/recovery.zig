@@ -1,6 +1,11 @@
 const std = @import("std");
 const model = @import("model.zig");
 
+pub const Observation = struct { token_id: []const u8, revision_id: []const u8, head_hash: []const u8, candidate_hash: []const u8, expires_at: i64 };
+pub fn observationMatches(observation: Observation, revision_id: []const u8, head_hash: []const u8, candidate_hash: []const u8, now: i64) bool {
+    return now < observation.expires_at and std.mem.eql(u8, observation.revision_id, revision_id) and std.mem.eql(u8, observation.head_hash, head_hash) and std.mem.eql(u8, observation.candidate_hash, candidate_hash);
+}
+
 pub fn selectionMatches(candidates: []const model.RecoveryCandidate, selected: []const []const u8) bool {
     if (selected.len == 0) return false;
     for (selected) |id| {

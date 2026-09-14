@@ -101,4 +101,8 @@ pub fn build(b: *std.Build) void {
         }),
     });
     test_step.dependOn(&b.addRunArtifact(workspace_contract_tests).step);
+    inline for (.{ "audit_workspace", "recovery_workspace", "workspace", "import", "workspace_fuzz" }) |name| {
+        const workspace_test = b.addTest(.{ .root_module = b.createModule(.{ .root_source_file = b.path("core/tests/" ++ name ++ ".zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "zintent_core", .module = core }} }) });
+        test_step.dependOn(&b.addRunArtifact(workspace_test).step);
+    }
 }

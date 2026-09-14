@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -34,6 +35,18 @@ type WorkspaceModel struct {
 	Completion                 CompletionScreen
 	Approval                   ApprovalModel
 	Snapshot                   SnapshotScreen
+	History                    HistoryScreen
+	Validation                 ValidationScreen
+	Recovery                   RecoveryScreen
+	IntentList                 IntentListScreen
+	Import                     ImportModal
+	WorkspacePath              string
+	WorkspaceExecutor          interface {
+		List() tea.Cmd
+		InspectDraft(string) tea.Cmd
+		ImportDraft(ImportModal) tea.Cmd
+		OpenIntent(string) tea.Cmd
+	}
 }
 
 type WorkspaceCanonicalMsg struct {
@@ -48,7 +61,12 @@ func NewWorkspace() WorkspaceModel {
 	return WorkspaceModel{nav: navigation{stack: []Screen{ScreenIntentList}}}
 }
 func (m WorkspaceModel) Screen() Screen { return m.nav.current() }
-func (m WorkspaceModel) Init() tea.Cmd  { return nil }
+func (m WorkspaceModel) Init() tea.Cmd {
+	if m.WorkspaceExecutor != nil {
+		return m.WorkspaceExecutor.List()
+	}
+	return nil
+}
 
 func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -56,9 +74,58 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyPressMsg:
 		key := msg.String()
+		if m.IntentList.FilterEditing {
+			switch key {
+			case "esc", "enter":
+				m.IntentList.FilterEditing = false
+			case "backspace":
+				if len(m.IntentList.Filter) > 0 {
+					m.IntentList.Filter = m.IntentList.Filter[:len(m.IntentList.Filter)-1]
+				}
+			default:
+				if msg.Text != "" {
+					m.IntentList.Filter += msg.Text
+					m.IntentList = m.IntentList.Reload(m.IntentList.Entries)
+				}
+			}
+			return m, nil
+		}
 		if key == "ctrl+c" || key == "q" && m.Modal == ModalClosed {
 			m.Quitting = true
 			return m, tea.Quit
+		}
+		if m.Import.Phase == ModalEditing {
+			switch key {
+			case "esc":
+				m.Import.Clear()
+				m.Modal = ModalClosed
+			case "backspace":
+				if len(m.Import.SourcePath) > 0 {
+					m.Import.SourcePath = m.Import.SourcePath[:len(m.Import.SourcePath)-1]
+				}
+			case "enter":
+				if m.Import.SourcePath != "" && m.WorkspaceExecutor != nil {
+					m.Import.Phase = ModalPreviewLoading
+					return m, m.WorkspaceExecutor.InspectDraft(m.Import.SourcePath)
+				}
+			default:
+				if msg.Text != "" {
+					m.Import.SourcePath += msg.Text
+				}
+			}
+			return m, nil
+		}
+		if m.Import.Phase == ModalConfirming {
+			if key == "esc" {
+				m.Import.Clear()
+				m.Modal = ModalClosed
+				return m, nil
+			}
+			if key == "enter" && m.Import.CanSubmit(time.Now()) && m.WorkspaceExecutor != nil {
+				m.Import.Phase = ModalSubmitting
+				return m, m.WorkspaceExecutor.ImportDraft(m.Import)
+			}
+			return m, nil
 		}
 		if key == "esc" {
 			if m.Modal != ModalClosed {
@@ -72,9 +139,30 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		switch key {
+		case "/":
+			if m.Screen() == ScreenIntentList {
+				m.IntentList.FilterEditing = true
+			}
+		case "n":
+			if m.Screen() == ScreenIntentList {
+				m.Import = ImportModal{Phase: ModalEditing}
+				m.Modal = ModalEditing
+			}
 		case "enter":
 			if m.Screen() == ScreenIntentList {
-				m.nav.push(ScreenDashboard)
+				if selected := m.IntentList.Selected(); selected != nil && !selected.Corrupt {
+					m.IntentID = selected.ID
+					m.Revision = selected.Revision
+					m.Lifecycle = selected.Lifecycle
+					m.SelectedID = selected.ID
+					if m.WorkspaceExecutor != nil {
+						m.Status = "loading canonical Intent"
+						return m, m.WorkspaceExecutor.OpenIntent(selected.Path)
+					}
+					m.nav.push(ScreenDashboard)
+				} else if m.WorkspaceExecutor == nil {
+					m.nav.push(ScreenDashboard)
+				}
 			}
 		case "r":
 			m.nav.push(ScreenReview)
@@ -108,6 +196,9 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.Comments = m.Comments.Reload(msg.Comments)
 		m.Completion.RevisionID = m.Revision
+		if m.Screen() == ScreenIntentList {
+			m.nav.push(ScreenDashboard)
+		}
 		m.ActiveRequestID = ""
 		m.Modal = ModalClosed
 		m.Status = "canonical Intent reloaded"
@@ -116,6 +207,41 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Snapshot.SafeToDisplay() {
 			m.nav.push(ScreenSnapshot)
 			m.Status = "approved snapshot verified"
+		}
+	case WorkspaceListMsg:
+		if msg.Err != nil {
+			m.Status = "workspace reload failed: " + msg.Err.Error()
+		} else {
+			m.IntentList = m.IntentList.Reload(msg.Entries)
+			m.Status = "workspace reloaded"
+		}
+	case DraftPreviewMsg:
+		if msg.Err != nil {
+			m.Import.ResetFailure(msg.Err.Error())
+			m.Modal = ModalError
+		} else {
+			m.Import.SourceHash = msg.SourceHash
+			m.Import.IntentID = msg.IntentID
+			m.Import.Destination = msg.Destination
+			m.Import.Token = msg.Token
+			m.Import.Findings = msg.Findings
+			m.Import.ExpiresAt = time.Now().Add(10 * time.Minute)
+			m.Import.Phase = ModalConfirming
+			m.Modal = ModalConfirming
+		}
+	case DraftImportedMsg:
+		if msg.Err != nil {
+			m.Import.ResetFailure(msg.Err.Error())
+			m.Modal = ModalError
+		} else {
+			m.SelectedID = msg.IntentID
+			m.IntentList.SelectedID = msg.IntentID
+			m.Import.Clear()
+			m.Modal = ModalClosed
+			m.Status = "Draft imported"
+			if m.WorkspaceExecutor != nil {
+				return m, m.WorkspaceExecutor.List()
+			}
 		}
 	}
 	return m, nil
@@ -161,9 +287,15 @@ func (m WorkspaceModel) View() tea.View {
 	fmt.Fprintf(&b, "zintent workspace  %s  intent:%s  rev:%s\n", m.Screen(), fallback(m.IntentID, "-"), fallback(m.Revision, "-"))
 	b.WriteString(strings.Repeat("─", min(width, 100)))
 	b.WriteByte('\n')
-	fmt.Fprintf(&b, "\n%s\n", workspaceBody(m.Screen()))
+	fmt.Fprintf(&b, "\n%s\n", m.screenBody())
 	if m.Status != "" {
 		fmt.Fprintf(&b, "\n%s\n", m.Status)
+	}
+	if m.Import.Phase != ModalClosed {
+		fmt.Fprintf(&b, "\nImport Draft\nSource: %s\nHash: %s\nDestination: %s\n", m.Import.SourcePath, m.Import.SourceHash, m.Import.Destination)
+		for _, finding := range m.Import.Findings {
+			fmt.Fprintf(&b, "BLOCKING: %s\n", finding)
+		}
 	}
 	b.WriteString("\nenter open  esc back  r review  c comments  f complete  p approve  h history  v validate  q quit\n")
 	v := tea.NewView(b.String())
@@ -172,6 +304,23 @@ func (m WorkspaceModel) View() tea.View {
 		v.Cursor = tea.NewCursor(0, 0)
 	}
 	return v
+}
+
+func (m WorkspaceModel) screenBody() string {
+	switch m.Screen() {
+	case ScreenHistory, ScreenDiff:
+		return m.History.View()
+	case ScreenValidation:
+		return m.Validation.View()
+	case ScreenSnapshot:
+		return m.Snapshot.View()
+	case ScreenRecovery:
+		return m.Recovery.View()
+	case ScreenIntentList:
+		return m.IntentList.View() + "\nn new Draft  / search"
+	default:
+		return workspaceBody(m.Screen())
+	}
 }
 
 func fallback(value, otherwise string) string {

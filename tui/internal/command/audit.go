@@ -14,6 +14,24 @@ type AuditResult struct {
 	Data      json.RawMessage `json:"data"`
 	Findings  []string        `json:"findings"`
 }
+type RevisionSummary struct {
+	RevisionID       string  `json:"revision_id"`
+	ParentRevisionID *string `json:"parent_revision_id"`
+	RevisionHash     string  `json:"revision_hash"`
+	OperationType    string  `json:"operation_type"`
+	ActorID          string  `json:"actor_id"`
+	CreatedAt        string  `json:"created_at"`
+	Lifecycle        string  `json:"lifecycle_state"`
+	Reachable        bool    `json:"reachable"`
+}
+type RevisionListData struct {
+	Reachable []RevisionSummary `json:"reachable"`
+	Orphans   []RevisionSummary `json:"orphans"`
+}
+type SnapshotData struct {
+	Snapshot json.RawMessage `json:"snapshot"`
+	Verified bool            `json:"verified"`
+}
 
 func InspectSnapshotRequest(requestID, intentPath, snapshotID string) (protocol.Request, error) {
 	body, err := json.Marshal(map[string]any{"operation": "inspect_snapshot", "intent_path": intentPath, "snapshot_id": snapshotID})
@@ -21,6 +39,21 @@ func InspectSnapshotRequest(requestID, intentPath, snapshotID string) (protocol.
 		return protocol.Request{}, err
 	}
 	return protocol.Request{ProtocolVersion: protocol.Version, RequestID: requestID, Operation: "inspect_snapshot", PayloadSchema: "zintent.command/1", Payload: body}, nil
+}
+
+func AuditRequest(operation, requestID, intentPath, id string) (protocol.Request, error) {
+	payload := map[string]any{"operation": operation, "intent_path": intentPath}
+	if operation == "inspect_revision" {
+		payload["revision_id"] = id
+	}
+	if operation == "inspect_snapshot" {
+		payload["snapshot_id"] = id
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return protocol.Request{}, err
+	}
+	return protocol.Request{ProtocolVersion: protocol.Version, RequestID: requestID, Operation: operation, PayloadSchema: "zintent.command/1", Payload: body}, nil
 }
 
 // FormatHuman keeps audit output useful without hiding the machine-readable

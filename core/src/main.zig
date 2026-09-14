@@ -27,11 +27,253 @@ pub fn main(init: std.process.Init) !void {
         try writePrepareApprovalResult(allocator, io, request.value, &stdout.interface);
     } else if (request.value.operation == .approve_intent) {
         try writeApproveResult(allocator, io, request.value, &stdout.interface);
+    } else if (request.value.operation == .list_revisions or request.value.operation == .inspect_revision or request.value.operation == .inspect_snapshot) {
+        try writeAuditWorkspaceResult(allocator, io, request.value, &stdout.interface);
+    } else if (request.value.operation == .recovery_status or request.value.operation == .cleanup_temporary_files) {
+        try writeRecoveryWorkspaceResult(allocator, io, request.value, &stdout.interface);
+    } else if (request.value.operation == .list_intents or request.value.operation == .inspect_draft or request.value.operation == .import_draft) {
+        try writeWorkspaceImportResult(allocator, io, request.value, &stdout.interface);
     } else {
         try core.protocol.writeResponse(request.value, &stdout.interface);
     }
     try stdout.interface.writeByte('\n');
     try stdout.flush();
+}
+
+fn writeWorkspaceImportResult(allocator: std.mem.Allocator, io: std.Io, request: core.protocol.Request, writer: *std.Io.Writer) !void {
+    const payload = switch (request.payload) {
+        .object => |value| value,
+        else => return writeFailure(io, request.request_id, "invalid_request", "Workspace payload must be an object."),
+    };
+    const workspace_path = stringField(payload, "workspace_path") orelse return writeFailure(io, request.request_id, "invalid_workspace", "workspace_path is required.");
+    if (request.operation == .list_intents) {
+        const discovery = core.workspace.discover(allocator, io, workspace_path) catch return writeFailure(io, request.request_id, "invalid_workspace", "Workspace root could not be opened.");
+        var data = try std.json.ObjectMap.init(allocator, &.{}, &.{});
+        try data.put(allocator, "entries", .{ .array = discovery.entries });
+        try data.put(allocator, "findings", .{ .array = discovery.findings });
+        return writeWorkspaceSuccess(allocator, request.request_id, "list_intents", .{ .object = data }, writer);
+    }
+    const source_path = stringField(payload, "source_path") orelse return writeFailure(io, request.request_id, "invalid_request", "source_path is required.");
+    const source = core.store.readBytes(allocator, io, source_path, core.max_message_bytes) catch return writeFailure(io, request.request_id, "draft_invalid", "Draft source could not be read.");
+    defer allocator.free(source);
+    var parsed = std.json.parseFromSlice(std.json.Value, allocator, source, .{ .allocate = .alloc_always }) catch return writeFailure(io, request.request_id, "draft_invalid", "Draft is not valid JSON.");
+    defer parsed.deinit();
+    core.validation.validateIntent(parsed.value) catch return writeFailure(io, request.request_id, "draft_invalid", "Draft failed validation.");
+    const source_hash = core.hashing.sha256Hex(source);
+    const proposed = try core.import.proposedId(allocator, &source_hash);
+    defer allocator.free(proposed);
+    const actor_id = actorID(payload) orelse return writeFailure(io, request.request_id, "missing_actor", "Human actor is required.");
+    if (request.operation == .inspect_draft) {
+        const destination = proposed;
+        const destination_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ workspace_path, destination });
+        defer allocator.free(destination_path);
+        var collision = false;
+        if (std.Io.Dir.cwd().openDir(io, destination_path, .{})) |dir_value| {
+            var dir = dir_value;
+            dir.close(io);
+            collision = true;
+        } else |_| {}
+        const token_input = try std.fmt.allocPrint(allocator, "{s}\x00{s}\x00{s}\x00{s}", .{ &source_hash, destination, actor_id, workspace_path });
+        defer allocator.free(token_input);
+        const token = core.hashing.sha256Hex(token_input);
+        const registry = try std.fmt.allocPrint(allocator, "{s}/.capabilities", .{workspace_path});
+        defer allocator.free(registry);
+        core.store.issueCapability(allocator, io, registry, .{ .token_id = &token, .intent_id = proposed, .expected_revision_id = destination, .actor_id = actor_id, .payload_hash = &source_hash, .expires_at_unix = unixNow(io) + 600 }) catch |err| switch (err) {
+            error.DestinationExists => {},
+            else => return writeFailure(io, request.request_id, "persistence_failure", "Import preview could not be issued."),
+        };
+        var findings = std.json.Array.init(allocator);
+        if (collision) {
+            var finding = try std.json.ObjectMap.init(allocator, &.{}, &.{});
+            try finding.put(allocator, "code", .{ .string = "destination_conflict" });
+            try finding.put(allocator, "severity", .{ .string = "blocking" });
+            try finding.put(allocator, "message", .{ .string = "Proposed destination already exists." });
+            try findings.append(.{ .object = finding });
+        }
+        var data = try std.json.ObjectMap.init(allocator, &.{}, &.{});
+        try data.put(allocator, "source_hash", .{ .string = &source_hash });
+        try data.put(allocator, "proposed_intent_id", .{ .string = proposed });
+        try data.put(allocator, "proposed_destination", .{ .string = destination });
+        try data.put(allocator, "import_token", .{ .string = &token });
+        try data.put(allocator, "expires_in_seconds", .{ .integer = 600 });
+        try data.put(allocator, "findings", .{ .array = findings });
+        return writeWorkspaceSuccess(allocator, request.request_id, "inspect_draft", .{ .object = data }, writer);
+    }
+    const destination = stringField(payload, "destination") orelse return writeFailure(io, request.request_id, "invalid_request", "destination is required.");
+    const token = stringField(payload, "import_token") orelse return writeFailure(io, request.request_id, "invalid_request", "import_token is required.");
+    const operation_id = stringField(payload, "operation_id") orelse return writeFailure(io, request.request_id, "invalid_request", "operation_id is required.");
+    if (!core.store.validStableId(operation_id)) return writeFailure(io, request.request_id, "path_escape", "operation_id must be a stable ID.");
+    const marker_path = try std.fmt.allocPrint(allocator, "{s}/.imports/{s}.json", .{ workspace_path, operation_id });
+    defer allocator.free(marker_path);
+    if (core.store.readBytes(allocator, io, marker_path, 16 * 1024)) |marker| {
+        defer allocator.free(marker);
+        var prior = std.json.parseFromSlice(std.json.Value, allocator, marker, .{}) catch return writeFailure(io, request.request_id, "operation_id_conflict", "Import operation record is corrupt.");
+        defer prior.deinit();
+        const prior_destination = stringFromValue(prior.value, "destination") orelse "";
+        const prior_token = stringFromValue(prior.value, "import_token") orelse "";
+        if (!std.mem.eql(u8, prior_destination, destination) or !std.mem.eql(u8, prior_token, token)) return writeFailure(io, request.request_id, "operation_id_conflict", "Operation ID was reused with different import content.");
+        var data = try std.json.ObjectMap.init(allocator, &.{}, &.{});
+        try data.put(allocator, "intent_id", .{ .string = proposed });
+        try data.put(allocator, "destination", .{ .string = destination });
+        try data.put(allocator, "source_preserved", .{ .bool = true });
+        try data.put(allocator, "identical_retry", .{ .bool = true });
+        return writeWorkspaceSuccess(allocator, request.request_id, "import_draft", .{ .object = data }, writer);
+    } else |_| {}
+    const registry = try std.fmt.allocPrint(allocator, "{s}/.capabilities", .{workspace_path});
+    defer allocator.free(registry);
+    var capability = core.store.consumeCapabilityRecord(allocator, io, registry, token, unixNow(io)) catch return writeFailure(io, request.request_id, "import_preview_expired", "Import preview is expired, consumed, or unknown.");
+    defer capability.deinit();
+    if (!std.mem.eql(u8, capability.value.actor_id, actor_id) or !std.mem.eql(u8, capability.value.expected_revision_id, destination) or !std.mem.eql(u8, capability.value.payload_hash, &source_hash)) return writeFailure(io, request.request_id, "draft_invalid", "Draft source, destination, or actor changed after preview.");
+    var root = switch (parsed.value) {
+        .object => |value| value,
+        else => unreachable,
+    };
+    const revision_payload = root.getPtr("revision_payload") orelse return writeFailure(io, request.request_id, "draft_invalid", "revision_payload is required.");
+    var draft_payload = switch (revision_payload.*) {
+        .object => |value| value,
+        else => return writeFailure(io, request.request_id, "draft_invalid", "revision_payload must be an object."),
+    };
+    try draft_payload.put(allocator, "intent_id", .{ .string = proposed });
+    revision_payload.* = .{ .object = draft_payload };
+    var output: std.Io.Writer.Allocating = .init(allocator);
+    defer output.deinit();
+    try std.json.Stringify.value(parsed.value, .{}, &output.writer);
+    const revision_id = stringFromObject(root, "revision_id") orelse return writeFailure(io, request.request_id, "draft_invalid", "revision_id is required.");
+    const lifecycle = stringFromObject(draft_payload, "lifecycle_state") orelse "draft";
+    core.import.importAtomic(allocator, io, workspace_path, destination, operation_id, output.written(), proposed, revision_id, lifecycle) catch |err| return writeFailure(io, request.request_id, if (err == error.DestinationExists) "destination_conflict" else if (err == error.PathEscape) "path_escape" else "persistence_failure", "Draft could not be imported atomically.");
+    var marker_output: std.Io.Writer.Allocating = .init(allocator);
+    defer marker_output.deinit();
+    try std.json.Stringify.value(.{ .destination = destination, .import_token = token }, .{}, &marker_output.writer);
+    core.store.publishAtomic(allocator, io, marker_path, marker_output.written(), true) catch return writeFailure(io, request.request_id, "persistence_failure", "Import operation record could not be published.");
+    var data = try std.json.ObjectMap.init(allocator, &.{}, &.{});
+    try data.put(allocator, "intent_id", .{ .string = proposed });
+    try data.put(allocator, "destination", .{ .string = destination });
+    try data.put(allocator, "source_preserved", .{ .bool = true });
+    return writeWorkspaceSuccess(allocator, request.request_id, "import_draft", .{ .object = data }, writer);
+}
+
+fn writeAuditWorkspaceResult(allocator: std.mem.Allocator, io: std.Io, request: core.protocol.Request, writer: *std.Io.Writer) !void {
+    const payload = switch (request.payload) {
+        .object => |value| value,
+        else => return writeFailure(io, request.request_id, "invalid_request", "Audit payload must be an object."),
+    };
+    const intent_path = stringField(payload, "intent_path") orelse return writeFailure(io, request.request_id, "invalid_request", "Intent path is required.");
+    var data = try std.json.ObjectMap.init(allocator, &.{}, &.{});
+    if (request.operation == .list_revisions) {
+        const chain = core.store.loadRevisionChain(allocator, io, intent_path) catch return writeFailure(io, request.request_id, "integrity_failure", "Reachable revision chain is invalid.");
+        const orphans = core.store.findOrphans(allocator, io, intent_path, chain) catch return writeFailure(io, request.request_id, "integrity_failure", "Revision directory could not be inspected.");
+        try data.put(allocator, "reachable", .{ .array = chain });
+        try data.put(allocator, "orphans", .{ .array = orphans });
+    } else if (request.operation == .inspect_revision) {
+        const id = stringField(payload, "revision_id") orelse return writeFailure(io, request.request_id, "invalid_request", "revision_id is required.");
+        const bytes = core.store.readRevisionById(allocator, io, intent_path, id) catch |err| return writeFailure(io, request.request_id, if (err == error.PathEscape) "path_escape" else "revision_not_found", "Revision could not be verified.");
+        defer allocator.free(bytes);
+        var parsed = std.json.parseFromSlice(std.json.Value, allocator, bytes, .{ .allocate = .alloc_always }) catch return writeFailure(io, request.request_id, "integrity_failure", "Revision JSON is invalid.");
+        defer parsed.deinit();
+        try data.put(allocator, "revision", parsed.value);
+    } else {
+        const id = stringField(payload, "snapshot_id") orelse return writeFailure(io, request.request_id, "invalid_request", "snapshot_id is required.");
+        if (!core.store.validStableId(id)) return writeFailure(io, request.request_id, "path_escape", "Snapshot ID must not contain a path.");
+        const path = try std.fmt.allocPrint(allocator, "{s}/snapshots/{s}.json", .{ intent_path, id });
+        defer allocator.free(path);
+        const bytes = core.store.readBytes(allocator, io, path, core.max_message_bytes) catch return writeFailure(io, request.request_id, "snapshot_not_found", "Snapshot was not found.");
+        defer allocator.free(bytes);
+        var parsed = std.json.parseFromSlice(std.json.Value, allocator, bytes, .{ .allocate = .alloc_always }) catch return writeFailure(io, request.request_id, "integrity_failure", "Snapshot JSON is invalid.");
+        defer parsed.deinit();
+        const stored = stringFromValue(parsed.value, "snapshot_id") orelse return writeFailure(io, request.request_id, "integrity_failure", "Snapshot identity is missing.");
+        if (!std.mem.eql(u8, stored, id)) return writeFailure(io, request.request_id, "integrity_failure", "Snapshot identity does not match filename.");
+        const snapshot_object = switch (parsed.value) {
+            .object => |value| value,
+            else => return writeFailure(io, request.request_id, "integrity_failure", "Snapshot must be an object."),
+        };
+        const approved = snapshot_object.get("approved_content") orelse return writeFailure(io, request.request_id, "integrity_failure", "Approved content is missing.");
+        const approval_value = snapshot_object.get("approval") orelse return writeFailure(io, request.request_id, "integrity_failure", "Approval linkage is missing.");
+        const approval = switch (approval_value) {
+            .object => |value| value,
+            else => return writeFailure(io, request.request_id, "integrity_failure", "Approval linkage is invalid."),
+        };
+        const expected_hash = stringFromObject(approval, "approved_content_hash") orelse return writeFailure(io, request.request_id, "integrity_failure", "Approved content hash is missing.");
+        const canonical = try core.hashing.canonicalize(allocator, approved);
+        defer allocator.free(canonical);
+        const actual_hash = core.hashing.sha256Hex(canonical);
+        if (!std.mem.eql(u8, expected_hash, &actual_hash)) return writeFailure(io, request.request_id, "integrity_failure", "Approved content hash does not match.");
+        const revision_id = stringFromObject(approval, "approved_revision_id") orelse return writeFailure(io, request.request_id, "integrity_failure", "Approved revision linkage is missing.");
+        const revision_bytes = core.store.readRevisionById(allocator, io, intent_path, revision_id) catch return writeFailure(io, request.request_id, "integrity_failure", "Approved revision linkage is broken.");
+        defer allocator.free(revision_bytes);
+        try data.put(allocator, "snapshot", parsed.value);
+        try data.put(allocator, "verified", .{ .bool = true });
+    }
+    try writeWorkspaceSuccess(allocator, request.request_id, @tagName(request.operation), .{ .object = data }, writer);
+}
+
+fn writeRecoveryWorkspaceResult(allocator: std.mem.Allocator, io: std.Io, request: core.protocol.Request, writer: *std.Io.Writer) !void {
+    const payload = switch (request.payload) {
+        .object => |value| value,
+        else => return writeFailure(io, request.request_id, "invalid_request", "Recovery payload must be an object."),
+    };
+    const intent_path = stringField(payload, "intent_path") orelse return writeFailure(io, request.request_id, "invalid_request", "Intent path is required.");
+    const verified = core.store.loadVerifiedRevision(allocator, io, intent_path) catch return writeFailure(io, request.request_id, "integrity_failure", "HEAD is invalid.");
+    defer allocator.free(verified.bytes);
+    if (request.operation == .recovery_status) {
+        const candidates = core.store.listTemporaryCandidates(allocator, io, intent_path) catch return writeFailure(io, request.request_id, "integrity_failure", "Recovery candidates could not be observed.");
+        const canonical = try core.hashing.canonicalize(allocator, .{ .array = candidates });
+        defer allocator.free(canonical);
+        const observation_hash = core.hashing.sha256Hex(canonical);
+        const token_input = try std.fmt.allocPrint(allocator, "{s}\x00{s}", .{ verified.head.current_revision_id, &observation_hash });
+        defer allocator.free(token_input);
+        const token = core.hashing.sha256Hex(token_input);
+        const registry = try capabilityRegistry(allocator, io, intent_path);
+        defer allocator.free(registry);
+        core.store.issueCapability(allocator, io, registry, .{ .token_id = &token, .intent_id = verified.head.intent_id, .expected_revision_id = verified.head.current_revision_id, .actor_id = "", .payload_hash = &observation_hash, .expires_at_unix = unixNow(io) + 600 }) catch |err| switch (err) {
+            error.DestinationExists => {},
+            else => return writeFailure(io, request.request_id, "persistence_failure", "Recovery token could not be issued."),
+        };
+        var data = try std.json.ObjectMap.init(allocator, &.{}, &.{});
+        try data.put(allocator, "observed_revision_id", .{ .string = verified.head.current_revision_id });
+        try data.put(allocator, "observed_head_hash", .{ .string = verified.head.current_revision_hash });
+        try data.put(allocator, "temporary_candidates", .{ .array = candidates });
+        try data.put(allocator, "recovery_token", .{ .string = &token });
+        try data.put(allocator, "expires_in_seconds", .{ .integer = 600 });
+        return writeWorkspaceSuccess(allocator, request.request_id, "recovery_status", .{ .object = data }, writer);
+    }
+    const lock_path = try std.fmt.allocPrint(allocator, "{s}/.lock", .{intent_path});
+    defer allocator.free(lock_path);
+    const held = core.store.acquireLock(io, lock_path) catch return writeFailure(io, request.request_id, "intent_locked", "Intent is locked by another mutation.");
+    defer held.release();
+    const locked_verified = core.store.loadVerifiedRevision(allocator, io, intent_path) catch return writeFailure(io, request.request_id, "integrity_failure", "HEAD is invalid under lock.");
+    defer allocator.free(locked_verified.bytes);
+    const expected = stringField(payload, "expected_revision_id") orelse return writeFailure(io, request.request_id, "invalid_request", "expected_revision_id is required.");
+    const expected_head = stringField(payload, "expected_head_hash") orelse return writeFailure(io, request.request_id, "invalid_request", "expected_head_hash is required.");
+    if (!std.mem.eql(u8, expected, locked_verified.head.current_revision_id) or !std.mem.eql(u8, expected_head, locked_verified.head.current_revision_hash)) return writeFailure(io, request.request_id, "recovery_observation_stale", "HEAD changed after recovery observation.");
+    const token = stringField(payload, "recovery_token") orelse return writeFailure(io, request.request_id, "invalid_request", "recovery_token is required.");
+    const registry = try capabilityRegistry(allocator, io, intent_path);
+    defer allocator.free(registry);
+    var capability = core.store.consumeCapabilityRecord(allocator, io, registry, token, unixNow(io)) catch return writeFailure(io, request.request_id, "recovery_observation_stale", "Recovery token is expired or consumed.");
+    defer capability.deinit();
+    const candidates = core.store.listTemporaryCandidates(allocator, io, intent_path) catch return writeFailure(io, request.request_id, "integrity_failure", "Recovery candidates changed.");
+    const canonical = try core.hashing.canonicalize(allocator, .{ .array = candidates });
+    defer allocator.free(canonical);
+    const observation_hash = core.hashing.sha256Hex(canonical);
+    if (!std.mem.eql(u8, capability.value.payload_hash, &observation_hash)) return writeFailure(io, request.request_id, "cleanup_target_changed", "Candidate set changed after observation.");
+    const ids_value = payload.get("candidate_ids") orelse return writeFailure(io, request.request_id, "invalid_request", "candidate_ids are required.");
+    const ids_array = switch (ids_value) {
+        .array => |value| value,
+        else => return writeFailure(io, request.request_id, "invalid_request", "candidate_ids must be an array."),
+    };
+    var ids = std.ArrayList([]const u8).empty;
+    for (ids_array.items) |value| {
+        if (value != .string) return writeFailure(io, request.request_id, "invalid_request", "candidate ID must be a string.");
+        try ids.append(allocator, value.string);
+    }
+    const removed = core.store.cleanupSelectedTemporaryFiles(io, intent_path, ids.items) catch return writeFailure(io, request.request_id, "cleanup_target_changed", "Selected cleanup target is not an unchanged temporary file.");
+    var data = try std.json.ObjectMap.init(allocator, &.{}, &.{});
+    try data.put(allocator, "removed_count", .{ .integer = @intCast(removed) });
+    return writeWorkspaceSuccess(allocator, request.request_id, "cleanup_temporary_files", .{ .object = data }, writer);
+}
+
+fn writeWorkspaceSuccess(allocator: std.mem.Allocator, request_id: []const u8, operation: []const u8, data: std.json.Value, writer: *std.Io.Writer) !void {
+    _ = allocator;
+    try std.json.Stringify.value(.{ .protocol_version = core.protocol.protocol_version, .request_id = request_id, .ok = true, .result_schema = "zintent.result/1", .result = .{ .contract_version = "1.0.0", .ok = true, .operation = operation, .affected_ids = &.{}, .findings = &.{}, .data = data } }, .{}, writer);
 }
 
 fn writePreviewResult(allocator: std.mem.Allocator, io: std.Io, request: core.protocol.Request, writer: *std.Io.Writer) !void {

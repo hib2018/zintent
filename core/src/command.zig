@@ -107,8 +107,9 @@ pub const Command = struct {
 
     pub fn validate(self: Command) !void {
         if (model.isMutation(self.operation)) {
-            if (self.intent_path == null or self.expected_revision_id == null or self.operation_id == null or self.actor == null)
-                return error.InvalidCommand;
+            if (self.operation == .import_draft) {
+                if (self.operation_id == null or self.actor == null) return error.InvalidCommand;
+            } else if (self.intent_path == null or self.expected_revision_id == null or self.operation_id == null or self.actor == null) return error.InvalidCommand;
             try self.actor.?.validate();
         }
         switch (self.operation) {

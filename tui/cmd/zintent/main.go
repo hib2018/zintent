@@ -44,7 +44,7 @@ func run(args []string) error {
 			return runApproval(context.Background(), parsed)
 		}
 		if parsed.operation == "workspace" {
-			return runWorkspace()
+			return runWorkspace(parsed)
 		}
 		return runReview(context.Background(), parsed)
 	}
@@ -62,11 +62,19 @@ func run(args []string) error {
 	return nil
 }
 
-func runWorkspace() error {
+func runWorkspace(parsed options) error {
 	if !term.IsTerminal(os.Stdin.Fd()) || !term.IsTerminal(os.Stdout.Fd()) {
 		return exitError{5, errors.New("tty_required: workspace requires an interactive terminal")}
 	}
-	_, err := tea.NewProgram(ui.NewWorkspace(), tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout)).Run()
+	actor, err := localActor(parsed.actorID)
+	if err != nil {
+		return err
+	}
+	workspacePath, _ := parsed.payload["workspace_path"].(string)
+	model := ui.NewWorkspace()
+	model.WorkspacePath = workspacePath
+	model.WorkspaceExecutor = ui.WorkspaceCoreCommands{Core: runner.Core{Executable: parsed.corePath}, WorkspacePath: workspacePath, Actor: actor}
+	_, err = tea.NewProgram(model, tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout)).Run()
 	return err
 }
 

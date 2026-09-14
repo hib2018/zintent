@@ -94,24 +94,24 @@ description: "Dependency-ordered tasks for Full-screen Intent Workspace"
 
 ### Tests for User Story 2
 
-- [ ] T032 [P] [US2] Write failing Zig tests for reachable-chain summaries, verified revision/snapshot inspection, orphan separation, path traversal refusal, and integrity errors in core/tests/audit_workspace.zig
-- [ ] T033 [P] [US2] Write failing Zig recovery observation/token tests for exact candidate binding, expiry, HEAD change, candidate change, exclusive locking, and protected artifact refusal in core/tests/recovery_workspace.zig
-- [ ] T034 [P] [US2] Write failing protocol integration tests for list_revisions, inspect_revision, inspect_snapshot, recovery_status, and cleanup_temporary_files envelopes in tests/integration/workspace_audit_protocol_test.go
-- [ ] T035 [P] [US2] Write failing history/diff/provenance, validation, snapshot, and recovery reducer/golden tests in tui/internal/ui/audit_workspace_test.go and tui/internal/ui/testdata/
-- [ ] T036 [US2] Write the failing PTY audit-and-recovery journey proving confirmed cleanup and terminal restoration in tests/integration/fullscreen_audit_journey_test.go
+- [X] T032 [P] [US2] Write failing Zig tests for reachable-chain summaries, verified revision/snapshot inspection, orphan separation, path traversal refusal, and integrity errors in core/tests/audit_workspace.zig
+- [X] T033 [P] [US2] Write failing Zig recovery observation/token tests for exact candidate binding, expiry, HEAD change, candidate change, exclusive locking, and protected artifact refusal in core/tests/recovery_workspace.zig
+- [X] T034 [P] [US2] Write failing protocol integration tests for list_revisions, inspect_revision, inspect_snapshot, recovery_status, and cleanup_temporary_files envelopes in tests/integration/workspace_audit_protocol_test.go
+- [X] T035 [P] [US2] Write failing history/diff/provenance, validation, snapshot, and recovery reducer/golden tests in tui/internal/ui/audit_workspace_test.go and tui/internal/ui/testdata/
+- [X] T036 [US2] Write the failing PTY audit-and-recovery journey proving confirmed cleanup and terminal restoration in tests/integration/fullscreen_audit_journey_test.go
 
 ### Implementation for User Story 2
 
-- [ ] T037 [P] [US2] Implement verified reachable revision summaries, orphan separation, ID-only revision resolution, and snapshot linkage verification in core/src/audit.zig and core/src/store.zig
-- [ ] T038 [P] [US2] Implement recovery_status observation hashing, candidate IDs, short-lived token issuance, and non-destructive reporting in core/src/recovery.zig
-- [ ] T039 [US2] Implement locked cleanup_temporary_files revalidation and deletion of only unchanged explicitly selected core temporary files in core/src/recovery.zig and core/src/store.zig
-- [ ] T040 [US2] Dispatch list_revisions, inspect_revision, inspect_snapshot, recovery_status, and cleanup_temporary_files with stable findings and errors in core/src/main.zig
-- [ ] T041 [P] [US2] Implement Go typed audit and recovery command adapters with JSON/human parity in tui/internal/command/audit.go and tui/internal/command/recovery.go
-- [ ] T042 [P] [US2] Implement history selection, revision metadata, two-revision item-aware diff, and provenance detail screens in tui/internal/ui/history.go
-- [ ] T043 [P] [US2] Implement validation finding filters, severity/record navigation, and full message display in tui/internal/ui/validation.go
-- [ ] T044 [P] [US2] Implement verified snapshot detail, approval linkage, actor, hash, and validation-result display in tui/internal/ui/snapshot.go
-- [ ] T045 [US2] Implement recovery status, candidate selection, explicit cleanup confirmation, stale observation handling, and protected-orphan display in tui/internal/ui/recovery.go
-- [ ] T046 [US2] Integrate dashboard audit navigation and pass the PTY audit/recovery journey in tui/internal/ui/dashboard.go and tests/integration/fullscreen_audit_journey_test.go
+- [X] T037 [P] [US2] Implement verified reachable revision summaries, orphan separation, ID-only revision resolution, and snapshot linkage verification in core/src/audit.zig and core/src/store.zig
+- [X] T038 [P] [US2] Implement recovery_status observation hashing, candidate IDs, short-lived token issuance, and non-destructive reporting in core/src/recovery.zig
+- [X] T039 [US2] Implement locked cleanup_temporary_files revalidation and deletion of only unchanged explicitly selected core temporary files in core/src/recovery.zig and core/src/store.zig
+- [X] T040 [US2] Dispatch list_revisions, inspect_revision, inspect_snapshot, recovery_status, and cleanup_temporary_files with stable findings and errors in core/src/main.zig
+- [X] T041 [P] [US2] Implement Go typed audit and recovery command adapters with JSON/human parity in tui/internal/command/audit.go and tui/internal/command/recovery.go
+- [X] T042 [P] [US2] Implement history selection, revision metadata, two-revision item-aware diff, and provenance detail screens in tui/internal/ui/history.go
+- [X] T043 [P] [US2] Implement validation finding filters, severity/record navigation, and full message display in tui/internal/ui/validation.go
+- [X] T044 [P] [US2] Implement verified snapshot detail, approval linkage, actor, hash, and validation-result display in tui/internal/ui/snapshot.go
+- [X] T045 [US2] Implement recovery status, candidate selection, explicit cleanup confirmation, stale observation handling, and protected-orphan display in tui/internal/ui/recovery.go
+- [X] T046 [US2] Integrate dashboard audit navigation and pass the PTY audit/recovery journey in tui/internal/ui/dashboard.go and tests/integration/fullscreen_audit_journey_test.go
 
 **Checkpoint**: User Story 2 independently provides a complete verified audit and safe recovery experience without direct Go filesystem access.
 
@@ -125,24 +125,24 @@ description: "Dependency-ordered tasks for Full-screen Intent Workspace"
 
 ### Tests for User Story 3
 
-- [ ] T047 [P] [US3] Write failing Zig tests for bounded direct-child discovery, deterministic ordering, corrupt-entry findings, symlink/path escape refusal, and workspace-root errors in core/tests/workspace.zig
-- [ ] T048 [P] [US3] Write failing Zig tests for inspect_draft/import_draft source binding, collision, expiry, source change, atomic publication, rollback, source preservation, and idempotency in core/tests/import.zig
-- [ ] T049 [P] [US3] Write failing protocol integration tests for list_intents, inspect_draft, and import_draft JSON contracts in tests/integration/workspace_import_protocol_test.go
-- [ ] T050 [P] [US3] Write failing Intent-list search, stable selection, corrupt-entry, import-modal, and resume reducer/golden tests in tui/internal/ui/intent_list_test.go and tui/internal/ui/testdata/
-- [ ] T051 [US3] Write the failing PTY workspace list/import/resume journey in tests/integration/fullscreen_workspace_journey_test.go
+- [X] T047 [P] [US3] Write failing Zig tests for bounded direct-child discovery, deterministic ordering, corrupt-entry findings, symlink/path escape refusal, and workspace-root errors in core/tests/workspace.zig
+- [X] T048 [P] [US3] Write failing Zig tests for inspect_draft/import_draft source binding, collision, expiry, source change, atomic publication, rollback, source preservation, and idempotency in core/tests/import.zig
+- [X] T049 [P] [US3] Write failing protocol integration tests for list_intents, inspect_draft, and import_draft JSON contracts in tests/integration/workspace_import_protocol_test.go
+- [X] T050 [P] [US3] Write failing Intent-list search, stable selection, corrupt-entry, import-modal, and resume reducer/golden tests in tui/internal/ui/intent_list_test.go and tui/internal/ui/testdata/
+- [X] T051 [US3] Write the failing PTY workspace list/import/resume journey in tests/integration/fullscreen_workspace_journey_test.go
 
 ### Implementation for User Story 3
 
-- [ ] T052 [P] [US3] Implement canonical bounded workspace discovery, direct-child verification, deterministic ordering, summaries, and per-entry findings in core/src/workspace.zig
-- [ ] T053 [P] [US3] Implement inspect_draft validation, proposed core-owned IDs/destination, source hashing, collision findings, and one-use import capability in core/src/import.zig
-- [ ] T054 [US3] Implement locked import_draft source revalidation, operation idempotency, temporary sibling construction, fsync, atomic rename, rollback, and source preservation in core/src/import.zig and core/src/store.zig
-- [ ] T055 [US3] Dispatch list_intents, inspect_draft, and import_draft with strict result envelopes and stable errors in core/src/main.zig
-- [ ] T056 [P] [US3] Implement Go workspace listing and two-step Draft import adapters in tui/internal/command/workspace.go
-- [ ] T057 [P] [US3] Implement Intent-list search/filter, lifecycle/blocker/approval summaries, stable-ID selection, corrupt-entry display, and workspace reload in tui/internal/ui/intent_list.go
-- [ ] T058 [US3] Implement Draft source input, inspect preview, destination/hash/finding confirmation, import submission, and failure-safe modal reset in tui/internal/ui/import.go
-- [ ] T059 [US3] Implement imported and existing Intent dashboard opening, canonical resume, and first-unresolved-record fallback in tui/internal/ui/workspace.go and tui/internal/ui/review.go
-- [ ] T060 [US3] Add the public interactive workspace command while preserving path-targeted review and machine-readable CLI commands in tui/cmd/zintent/main.go
-- [ ] T061 [US3] Pass the PTY workspace list/import/resume journey and verify no Go code directly writes Intent artifacts in tests/integration/fullscreen_workspace_journey_test.go
+- [X] T052 [P] [US3] Implement canonical bounded workspace discovery, direct-child verification, deterministic ordering, summaries, and per-entry findings in core/src/workspace.zig
+- [X] T053 [P] [US3] Implement inspect_draft validation, proposed core-owned IDs/destination, source hashing, collision findings, and one-use import capability in core/src/import.zig
+- [X] T054 [US3] Implement locked import_draft source revalidation, operation idempotency, temporary sibling construction, fsync, atomic rename, rollback, and source preservation in core/src/import.zig and core/src/store.zig
+- [X] T055 [US3] Dispatch list_intents, inspect_draft, and import_draft with strict result envelopes and stable errors in core/src/main.zig
+- [X] T056 [P] [US3] Implement Go workspace listing and two-step Draft import adapters in tui/internal/command/workspace.go
+- [X] T057 [P] [US3] Implement Intent-list search/filter, lifecycle/blocker/approval summaries, stable-ID selection, corrupt-entry display, and workspace reload in tui/internal/ui/intent_list.go
+- [X] T058 [US3] Implement Draft source input, inspect preview, destination/hash/finding confirmation, import submission, and failure-safe modal reset in tui/internal/ui/import.go
+- [X] T059 [US3] Implement imported and existing Intent dashboard opening, canonical resume, and first-unresolved-record fallback in tui/internal/ui/workspace.go and tui/internal/ui/review.go
+- [X] T060 [US3] Add the public interactive workspace command while preserving path-targeted review and machine-readable CLI commands in tui/cmd/zintent/main.go
+- [X] T061 [US3] Pass the PTY workspace list/import/resume journey and verify no Go code directly writes Intent artifacts in tests/integration/fullscreen_workspace_journey_test.go
 
 **Checkpoint**: All three stories operate independently and compose into the complete local full-screen Intent workspace.
 
@@ -152,13 +152,13 @@ description: "Dependency-ordered tasks for Full-screen Intent Workspace"
 
 **Purpose**: Close accessibility, performance, portability, documentation, and Constitution gates across all stories.
 
-- [ ] T062 [P] Add 1,000-item reducer/render latency assertions and visible-row rendering checks in tui/internal/ui/workspace_performance_test.go
-- [ ] T063 [P] Add PTY tests for normal quit, Ctrl+C, timeout, core crash, alternate-screen restoration, cursor restoration, and non-TTY refusal in tests/integration/fullscreen_terminal_test.go
-- [ ] T064 [P] Add property/fuzz tests for arbitrary key sequences, late request IDs, modal transitions, and invalid workspace responses in tui/internal/ui/workspace_fuzz_test.go and core/tests/workspace_fuzz.zig
-- [ ] T065 [P] Update installation, workspace command, screen map, key bindings, Draft import, approval, audit, and recovery documentation in README.md and docs/README.md
-- [ ] T066 Verify all Feature 001 CLI and zintent-review/zintent-approve skill contracts remain compatible in tests/integration/review_cli_test.go and .agents/skills/zintent-catalog.md
-- [ ] T067 Execute every scenario in specs/002-fullscreen-tui-workspace/quickstart.md and record results and deviations in specs/002-fullscreen-tui-workspace/validation-results.md
-- [ ] T068 Re-run Constitution gates, JSON Schema validation, cross-interface semantic parity, macOS/Linux CI, and first-time-user completion checks in specs/002-fullscreen-tui-workspace/validation-results.md
+- [X] T062 [P] Add 1,000-item reducer/render latency assertions and visible-row rendering checks in tui/internal/ui/workspace_performance_test.go
+- [X] T063 [P] Add PTY tests for normal quit, Ctrl+C, timeout, core crash, alternate-screen restoration, cursor restoration, and non-TTY refusal in tests/integration/fullscreen_terminal_test.go
+- [X] T064 [P] Add property/fuzz tests for arbitrary key sequences, late request IDs, modal transitions, and invalid workspace responses in tui/internal/ui/workspace_fuzz_test.go and core/tests/workspace_fuzz.zig
+- [X] T065 [P] Update installation, workspace command, screen map, key bindings, Draft import, approval, audit, and recovery documentation in README.md and docs/README.md
+- [X] T066 Verify all Feature 001 CLI and zintent-review/zintent-approve skill contracts remain compatible in tests/integration/review_cli_test.go and .agents/skills/zintent-catalog.md
+- [X] T067 Execute every scenario in specs/002-fullscreen-tui-workspace/quickstart.md and record results and deviations in specs/002-fullscreen-tui-workspace/validation-results.md
+- [X] T068 Re-run Constitution gates, JSON Schema validation, cross-interface semantic parity, macOS/Linux CI, and first-time-user completion checks in specs/002-fullscreen-tui-workspace/validation-results.md
 
 **Checkpoint**: The workspace satisfies performance, terminal safety, interface parity, documentation, and governance requirements.
 

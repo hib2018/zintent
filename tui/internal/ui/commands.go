@@ -3,7 +3,9 @@ package ui
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -33,6 +35,161 @@ type ActionResultMsg struct {
 type ReloadResultMsg struct {
 	Response protocol.Response
 	Err      error
+}
+
+type WorkspaceListMsg struct {
+	Entries []IntentEntry
+	Err     error
+}
+type DraftPreviewMsg struct {
+	SourceHash, IntentID, Destination, Token string
+	Findings                                 []string
+	Err                                      error
+}
+type DraftImportedMsg struct {
+	IntentID, Destination string
+	Err                   error
+}
+
+// OpenIntent resolves only a direct-child path supplied by the verified
+// workspace listing, then asks the core for canonical state.
+func (c WorkspaceCoreCommands) OpenIntent(intentPath string) tea.Cmd {
+	return func() tea.Msg {
+		if filepath.IsAbs(intentPath) || filepath.Base(intentPath) != intentPath || intentPath == "." {
+			return WorkspaceCanonicalMsg{Err: errors.New("invalid workspace Intent path")}
+		}
+		response, err := c.run("show_intent", map[string]any{"intent_path": filepath.Join(c.WorkspacePath, intentPath)})
+		if err != nil {
+			return WorkspaceCanonicalMsg{Err: err}
+		}
+		if !response.OK {
+			return WorkspaceCanonicalMsg{Err: errors.New(response.Error.Message)}
+		}
+		var result struct {
+			Data struct {
+				Intent struct {
+					IntentID        string `json:"intent_id"`
+					RevisionID      string `json:"revision_id"`
+					Lifecycle       string `json:"lifecycle_state"`
+					RevisionPayload struct {
+						Items []struct {
+							ID         string `json:"item_id"`
+							Kind       string `json:"kind"`
+							Statement  string `json:"statement"`
+							Status     string `json:"review_status"`
+							Provenance string `json:"provenance"`
+							Rationale  string `json:"rationale"`
+						} `json:"items"`
+					} `json:"revision_payload"`
+				} `json:"intent"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(response.Result, &result); err != nil {
+			return WorkspaceCanonicalMsg{Err: err}
+		}
+		items := make([]Item, 0, len(result.Data.Intent.RevisionPayload.Items))
+		for _, item := range result.Data.Intent.RevisionPayload.Items {
+			items = append(items, Item{ID: item.ID, Kind: item.Kind, Statement: item.Statement, Status: item.Status, Provenance: item.Provenance, Rationale: item.Rationale})
+		}
+		return WorkspaceCanonicalMsg{IntentID: result.Data.Intent.IntentID, RevisionID: result.Data.Intent.RevisionID, Lifecycle: result.Data.Intent.Lifecycle, Items: items}
+	}
+}
+
+type WorkspaceCoreCommands struct {
+	Core          runner.Core
+	WorkspacePath string
+	Actor         map[string]any
+}
+
+func (c WorkspaceCoreCommands) run(operation string, payload map[string]any) (protocol.Response, error) {
+	payload["operation"] = operation
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return protocol.Response{}, err
+	}
+	return c.Core.Run(context.Background(), protocol.Request{ProtocolVersion: protocol.Version, RequestID: fmt.Sprintf("workspace-%d", time.Now().UnixNano()), Operation: operation, PayloadSchema: "zintent.command/1", Payload: body})
+}
+func (c WorkspaceCoreCommands) List() tea.Cmd {
+	return func() tea.Msg {
+		response, err := c.run("list_intents", map[string]any{"workspace_path": c.WorkspacePath})
+		if err != nil {
+			return WorkspaceListMsg{Err: err}
+		}
+		if !response.OK {
+			return WorkspaceListMsg{Err: errors.New(response.Error.Message)}
+		}
+		var result struct {
+			Data struct {
+				Entries []struct {
+					IntentID          string `json:"intent_id"`
+					DisplayName       string `json:"display_name"`
+					IntentPath        string `json:"intent_path"`
+					CurrentRevisionID string `json:"current_revision_id"`
+					LifecycleState    string `json:"lifecycle_state"`
+					ApprovalState     string `json:"approval_state"`
+					SnapshotID        string `json:"snapshot_id"`
+					BlockerCount      int    `json:"blocker_count"`
+				} `json:"entries"`
+				Findings []struct {
+					RecordID string `json:"record_id"`
+					Message  string `json:"message"`
+				} `json:"findings"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(response.Result, &result); err != nil {
+			return WorkspaceListMsg{Err: err}
+		}
+		entries := []IntentEntry{}
+		for _, e := range result.Data.Entries {
+			entries = append(entries, IntentEntry{ID: e.IntentID, DisplayName: e.DisplayName, Path: e.IntentPath, Revision: e.CurrentRevisionID, Lifecycle: e.LifecycleState, ApprovalState: e.ApprovalState, SnapshotID: e.SnapshotID, BlockerCount: e.BlockerCount})
+		}
+		for _, f := range result.Data.Findings {
+			entries = append(entries, IntentEntry{ID: f.RecordID, DisplayName: f.RecordID, Corrupt: true, Finding: f.Message})
+		}
+		return WorkspaceListMsg{Entries: entries}
+	}
+}
+func (c WorkspaceCoreCommands) InspectDraft(source string) tea.Cmd {
+	return func() tea.Msg {
+		response, err := c.run("inspect_draft", map[string]any{"workspace_path": c.WorkspacePath, "source_path": source, "actor": c.Actor})
+		if err != nil {
+			return DraftPreviewMsg{Err: err}
+		}
+		if !response.OK {
+			return DraftPreviewMsg{Err: errors.New(response.Error.Message)}
+		}
+		var result struct {
+			Data struct {
+				SourceHash          string `json:"source_hash"`
+				ProposedIntentID    string `json:"proposed_intent_id"`
+				ProposedDestination string `json:"proposed_destination"`
+				ImportToken         string `json:"import_token"`
+				Findings            []struct {
+					Message string `json:"message"`
+				} `json:"findings"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(response.Result, &result); err != nil {
+			return DraftPreviewMsg{Err: err}
+		}
+		findings := []string{}
+		for _, f := range result.Data.Findings {
+			findings = append(findings, f.Message)
+		}
+		return DraftPreviewMsg{SourceHash: result.Data.SourceHash, IntentID: result.Data.ProposedIntentID, Destination: result.Data.ProposedDestination, Token: result.Data.ImportToken, Findings: findings}
+	}
+}
+func (c WorkspaceCoreCommands) ImportDraft(preview ImportModal) tea.Cmd {
+	return func() tea.Msg {
+		response, err := c.run("import_draft", map[string]any{"workspace_path": c.WorkspacePath, "source_path": preview.SourcePath, "destination": preview.Destination, "import_token": preview.Token, "operation_id": fmt.Sprintf("import-%d", time.Now().UnixNano()), "actor": c.Actor})
+		if err != nil {
+			return DraftImportedMsg{Err: err}
+		}
+		if !response.OK {
+			return DraftImportedMsg{Err: errors.New(response.Error.Message)}
+		}
+		return DraftImportedMsg{IntentID: preview.IntentID, Destination: preview.Destination}
+	}
 }
 
 func (c CoreCommands) Execute(operation, itemID string, extra map[string]any) tea.Cmd {
