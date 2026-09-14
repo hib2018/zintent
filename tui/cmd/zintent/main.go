@@ -42,6 +42,9 @@ func run(args []string) error {
 		if parsed.operation == "approve_intent" {
 			return runApproval(context.Background(), parsed)
 		}
+		if parsed.operation == "workspace" {
+			return runWorkspace()
+		}
 		return runReview(context.Background(), parsed)
 	}
 	request := protocol.Request{ProtocolVersion: protocol.Version, RequestID: fmt.Sprintf("cli-%d", time.Now().UnixNano()), Operation: parsed.operation, PayloadSchema: "zintent.command/1", Payload: payload}
@@ -56,6 +59,19 @@ func run(args []string) error {
 		return exitError{errorExit(response.Error.Code), errors.New(response.Error.Message)}
 	}
 	return nil
+}
+
+func runWorkspace() error {
+	if !stdinIsTerminal() {
+		return exitError{5, errors.New("tty_required: workspace requires an interactive terminal")}
+	}
+	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+	if err != nil {
+		return exitError{5, errors.New("tty_required: workspace terminal unavailable")}
+	}
+	_ = tty.Close()
+	_, err = tea.NewProgram(ui.NewWorkspace()).Run()
+	return err
 }
 
 func runApproval(ctx context.Context, parsed options) error {
@@ -283,6 +299,12 @@ func parseArgs(args []string) (options, error) {
 		}
 		o.interactive = true
 		o.payload["intent_path"] = positionals[1]
+	case "workspace":
+		if len(positionals) != 2 {
+			return o, errors.New("workspace requires one workspace path")
+		}
+		o.interactive = true
+		o.payload["workspace_path"] = positionals[1]
 	case "approve_intent":
 		if len(positionals) != 2 {
 			return o, errors.New("approve requires one Intent path")
@@ -334,7 +356,7 @@ func parseArgs(args []string) (options, error) {
 
 func modelNeedsActor(operation string) bool {
 	switch operation {
-	case "protocol_info", "show_intent", "validate_intent", "diff_revisions", "prepare_approval":
+	case "protocol_info", "show_intent", "validate_intent", "diff_revisions", "prepare_approval", "workspace", "list_intents", "list_revisions", "inspect_revision", "inspect_snapshot", "recovery_status":
 		return false
 	default:
 		return true

@@ -10,6 +10,7 @@ import (
 
 var ErrMutationInFlight = errors.New("a mutation is already in flight")
 var ErrLateResponse = errors.New("late or mismatched core response")
+var ErrIndeterminate = errors.New("mutation result is indeterminate; canonical reload required")
 
 type Runner interface {
 	Run(context.Context, protocol.Request) (protocol.Response, error)
@@ -21,6 +22,7 @@ type Executor struct {
 	cancel         context.CancelFunc
 	mu             sync.Mutex
 	activeMutation string
+	indeterminate  bool
 }
 
 func NewExecutor(parent context.Context, core Runner) *Executor {
@@ -42,6 +44,12 @@ func (e *Executor) Execute(request protocol.Request, mutation bool) (protocol.Re
 	}
 	response, err := e.core.Run(e.ctx, request)
 	if err != nil {
+		if mutation {
+			e.mu.Lock()
+			e.indeterminate = true
+			e.mu.Unlock()
+			return response, errors.Join(ErrIndeterminate, err)
+		}
 		return response, err
 	}
 	if response.RequestID != request.RequestID {
@@ -49,3 +57,10 @@ func (e *Executor) Execute(request protocol.Request, mutation bool) (protocol.Re
 	}
 	return response, nil
 }
+
+func (e *Executor) NeedsCanonicalReload() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.indeterminate
+}
+func (e *Executor) MarkReloaded() { e.mu.Lock(); e.indeterminate = false; e.mu.Unlock() }

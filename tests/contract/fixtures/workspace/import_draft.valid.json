@@ -1,0 +1,1 @@
+{"operation":"import_draft","workspace_path":"/tmp/workspace","source_path":"/tmp/draft.json","destination":"intent-1","import_token":"token","operation_id":"op-1","actor":{"actor_type":"human","actor_id":"alice","identity_source":"os_user","authenticated":false}}

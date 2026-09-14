@@ -1,0 +1,1 @@
+{"operation":"cleanup_temporary_files","intent_path":"/tmp/intent","expected_revision_id":"rev-1","expected_head_hash":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","recovery_token":"token","candidate_ids":["candidate-1"],"operation_id":"op-1","actor":{"actor_type":"human","actor_id":"alice","identity_source":"os_user","authenticated":false}}

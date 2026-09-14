@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -73,5 +74,18 @@ func TestApprovalRefusesNonTTY(t *testing.T) {
 	err := run([]string{"approve", "intent", "--revision", "r-1", "--operation-id", "op-1", "--actor-id", "alice"})
 	if err == nil || err.Error() == "" {
 		t.Fatal("expected tty refusal")
+	}
+}
+
+func TestWorkspaceCommandAndNonTTYRefusal(t *testing.T) {
+	o, err := parseArgs([]string{"workspace", "/tmp/intents"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !o.interactive || o.operation != "workspace" || o.payload["workspace_path"] != "/tmp/intents" {
+		t.Fatalf("unexpected workspace options: %#v", o)
+	}
+	if err := run([]string{"workspace", "/tmp/intents"}); err == nil || !strings.Contains(err.Error(), "tty_required") {
+		t.Fatalf("expected TTY refusal, got %v", err)
 	}
 }

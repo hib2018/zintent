@@ -25,6 +25,8 @@ type WorkspaceModel struct {
 	Width, Height              int
 	IntentID, Revision, Status string
 	SelectedID                 string
+	RecordIDs                  []string
+	ActiveRequestID            string
 	Quitting                   bool
 }
 
@@ -83,6 +85,34 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// ReloadRecords preserves selection by stable ID. If it disappeared, the
+// first remaining record becomes the deterministic fallback.
+func (m WorkspaceModel) ReloadRecords(ids []string) WorkspaceModel {
+	selected := m.SelectedID
+	m.RecordIDs = append(m.RecordIDs[:0], ids...)
+	m.SelectedID = ""
+	for _, id := range m.RecordIDs {
+		if id == selected {
+			m.SelectedID = id
+			return m
+		}
+	}
+	if len(m.RecordIDs) > 0 {
+		m.SelectedID = m.RecordIDs[0]
+	}
+	return m
+}
+
+// BeginConfirm suppresses repeated confirmation while the same request is in
+// flight. The operation itself remains delegated to the command executor.
+func (m WorkspaceModel) BeginConfirm(requestID string) (WorkspaceModel, bool) {
+	if requestID == "" || m.ActiveRequestID != "" || m.Modal == ModalSubmitting || m.Modal == ModalReloadLoading {
+		return m, false
+	}
+	m.ActiveRequestID, m.Modal = requestID, ModalSubmitting
+	return m, true
+}
+
 func (m WorkspaceModel) View() tea.View {
 	if m.Quitting {
 		return tea.NewView("Workspace closed.\n")
@@ -102,6 +132,9 @@ func (m WorkspaceModel) View() tea.View {
 	b.WriteString("\nenter open  esc back  r review  c comments  f complete  p approve  h history  v validate  q quit\n")
 	v := tea.NewView(b.String())
 	v.AltScreen = true
+	if m.Modal == ModalEditing {
+		v.Cursor = tea.NewCursor(0, 0)
+	}
 	return v
 }
 

@@ -42,3 +42,41 @@ func TestWorkspaceUsesAlternateScreen(t *testing.T) {
 		t.Fatal("workspace must own alternate screen")
 	}
 }
+
+func TestWorkspaceStableIDSelectionAndFallback(t *testing.T) {
+	m := NewWorkspace().ReloadRecords([]string{"i-1", "i-2"})
+	m.SelectedID = "i-2"
+	m = m.ReloadRecords([]string{"i-0", "i-2", "i-3"})
+	if m.SelectedID != "i-2" {
+		t.Fatalf("selection=%q", m.SelectedID)
+	}
+	m = m.ReloadRecords([]string{"i-0", "i-3"})
+	if m.SelectedID != "i-0" {
+		t.Fatalf("fallback=%q", m.SelectedID)
+	}
+}
+
+func TestWorkspaceSuppressesRepeatedConfirm(t *testing.T) {
+	m := NewWorkspace()
+	m.Modal = ModalConfirming
+	var ok bool
+	m, ok = m.BeginConfirm("request-1")
+	if !ok || m.Modal != ModalSubmitting {
+		t.Fatal("first confirmation must submit")
+	}
+	_, ok = m.BeginConfirm("request-2")
+	if ok {
+		t.Fatal("repeated confirmation must be suppressed")
+	}
+}
+
+func TestWorkspaceCursorOnlyWhileEditing(t *testing.T) {
+	m := NewWorkspace()
+	if m.View().Cursor != nil {
+		t.Fatal("cursor must be hidden outside input")
+	}
+	m.Modal = ModalEditing
+	if m.View().Cursor == nil {
+		t.Fatal("editing must show cursor")
+	}
+}

@@ -39,17 +39,17 @@ description: "Dependency-ordered tasks for Full-screen Intent Workspace"
 
 **CRITICAL**: No user-story implementation begins until this phase is complete.
 
-- [ ] T006 [P] Add valid and invalid fixtures for every operation in contracts/workspace-command.schema.json under tests/contract/fixtures/workspace/
+- [X] T006 [P] Add valid and invalid fixtures for every operation in contracts/workspace-command.schema.json under tests/contract/fixtures/workspace/
 - [X] T007 Write failing Zig strict-decoding and mutation-classification tests for all workspace operations in core/tests/workspace_contract.zig
-- [ ] T008 [P] Write failing Go cross-language compatibility tests for workspace command and result envelopes in tests/contract/workspace_compatibility_test.go
+- [X] T008 [P] Write failing Go cross-language compatibility tests for workspace command and result envelopes in tests/contract/workspace_compatibility_test.go
 - [X] T009 [P] Define workspace entries, audit summaries, recovery observations, and transient capability bindings in core/src/model.zig and core/src/command.zig
 - [X] T010 Implement additive operation decoding, validation, mutation classification, and protocol_info capability reporting in core/src/model.zig, core/src/command.zig, and core/src/protocol.zig
 - [X] T011 [P] Define typed Go workspace requests, results, findings, request correlation metadata, and screen-independent canonical Intent views in tui/internal/protocol/workspace.go
-- [ ] T012 [P] Write failing reducer tests for root screen routing, navigation stack, stable-ID selection, modal exclusivity, key-release rejection, and repeated-confirm suppression in tui/internal/ui/workspace_test.go
+- [X] T012 [P] Write failing reducer tests for root screen routing, navigation stack, stable-ID selection, modal exclusivity, key-release rejection, and repeated-confirm suppression in tui/internal/ui/workspace_test.go
 - [X] T013 Implement the root WorkspaceModel, explicit Screen enum, navigation stack, shared header/status/help frame, and single active modal routing in tui/internal/ui/workspace.go and tui/internal/ui/navigation.go
-- [ ] T014 [P] Implement program-lifetime cancellation, typed request correlation, one-active-mutation enforcement, late-response rejection, and indeterminate-result handling in tui/internal/command/executor.go
-- [ ] T015 Implement alternate-screen ownership, interactive-TTY refusal, cursor behavior, graceful shutdown, and canonical reload recovery in tui/cmd/zintent/main.go and tui/internal/ui/workspace.go
-- [ ] T016 [P] Add wide, narrow, loading, empty, long-text, error, and blocker-heavy root frame golden tests in tui/internal/ui/workspace_view_test.go and tui/internal/ui/testdata/
+- [X] T014 [P] Implement program-lifetime cancellation, typed request correlation, one-active-mutation enforcement, late-response rejection, and indeterminate-result handling in tui/internal/command/executor.go
+- [X] T015 Implement alternate-screen ownership, interactive-TTY refusal, cursor behavior, graceful shutdown, and canonical reload recovery in tui/cmd/zintent/main.go and tui/internal/ui/workspace.go
+- [X] T016 [P] Add wide, narrow, loading, empty, long-text, error, and blocker-heavy root frame golden tests in tui/internal/ui/workspace_view_test.go and tui/internal/ui/testdata/
 
 **Checkpoint**: A full-screen shell can route among placeholder screens, owns the terminal safely, and cannot mutate artifacts directly.
 
