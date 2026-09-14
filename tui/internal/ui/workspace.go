@@ -28,7 +28,21 @@ type WorkspaceModel struct {
 	RecordIDs                  []string
 	ActiveRequestID            string
 	Quitting                   bool
+	Lifecycle                  string
+	Review                     ReviewScreen
+	Comments                   CommentsScreen
+	Completion                 CompletionScreen
+	Approval                   ApprovalModel
+	Snapshot                   SnapshotScreen
 }
+
+type WorkspaceCanonicalMsg struct {
+	IntentID, RevisionID, Lifecycle, SelectedID string
+	Items                                       []Item
+	Comments                                    []CommentRecord
+	Err                                         error
+}
+type SnapshotIssuedMsg struct{ Snapshot SnapshotScreen }
 
 func NewWorkspace() WorkspaceModel {
 	return WorkspaceModel{nav: navigation{stack: []Screen{ScreenIntentList}}}
@@ -81,6 +95,28 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case tea.WindowSizeMsg:
 		m.Width, m.Height = msg.Width, msg.Height
+	case WorkspaceCanonicalMsg:
+		if msg.Err != nil {
+			m.Status = "canonical reload failed: " + msg.Err.Error()
+			m.Modal = ModalError
+			break
+		}
+		m.IntentID, m.Revision, m.Lifecycle = msg.IntentID, msg.RevisionID, msg.Lifecycle
+		m.Review = m.Review.Reload(msg.Items)
+		if msg.SelectedID != "" {
+			m.Review.SelectedID = msg.SelectedID
+		}
+		m.Comments = m.Comments.Reload(msg.Comments)
+		m.Completion.RevisionID = m.Revision
+		m.ActiveRequestID = ""
+		m.Modal = ModalClosed
+		m.Status = "canonical Intent reloaded"
+	case SnapshotIssuedMsg:
+		m.Snapshot = msg.Snapshot
+		if msg.Snapshot.SafeToDisplay() {
+			m.nav.push(ScreenSnapshot)
+			m.Status = "approved snapshot verified"
+		}
 	}
 	return m, nil
 }

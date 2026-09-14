@@ -63,24 +63,24 @@ description: "Dependency-ordered tasks for Full-screen Intent Workspace"
 
 ### Tests for User Story 1
 
-- [ ] T017 [P] [US1] Write failing table tests for edit, comment, reject, closure, completion, and approval modal state machines in tui/internal/ui/modals_test.go
-- [ ] T018 [P] [US1] Write failing command-adapter tests proving exact preview/token/reason/challenge dispatch, no generic-message approval, and canonical reload after every mutation in tui/internal/command/review_flow_test.go
-- [ ] T019 [P] [US1] Write failing review and comment screen reducer tests for stable-ID navigation, blocker jumps, focus, scrolling, cancellation, stale reload, and double-submit rejection in tui/internal/ui/review_workspace_test.go
-- [ ] T020 [P] [US1] Write failing completion and approval reducer/view tests for exact revision/hash display, non-TTY refusal, expiry, mismatch, cancellation, and snapshot result navigation in tui/internal/ui/approval_workspace_test.go
-- [ ] T021 [US1] Write the failing PTY-backed Draft-to-snapshot journey, terminal restoration cases, and concurrent stale mutation scenario in tests/integration/fullscreen_review_journey_test.go
+- [X] T017 [P] [US1] Write failing table tests for edit, comment, reject, closure, completion, and approval modal state machines in tui/internal/ui/modals_test.go
+- [X] T018 [P] [US1] Write failing command-adapter tests proving exact preview/token/reason/challenge dispatch, no generic-message approval, and canonical reload after every mutation in tui/internal/command/review_flow_test.go
+- [X] T019 [P] [US1] Write failing review and comment screen reducer tests for stable-ID navigation, blocker jumps, focus, scrolling, cancellation, stale reload, and double-submit rejection in tui/internal/ui/review_workspace_test.go
+- [X] T020 [P] [US1] Write failing completion and approval reducer/view tests for exact revision/hash display, non-TTY refusal, expiry, mismatch, cancellation, and snapshot result navigation in tui/internal/ui/approval_workspace_test.go
+- [X] T021 [US1] Write the failing PTY-backed Draft-to-snapshot journey, terminal restoration cases, and concurrent stale mutation scenario in tests/integration/fullscreen_review_journey_test.go
 
 ### Implementation for User Story 1
 
-- [ ] T022 [P] [US1] Implement dedicated edit, comment, reject, comment-closure, completion, and approval modal states with explicit phases in tui/internal/ui/modals.go
-- [ ] T023 [P] [US1] Implement review list/detail panes, viewport scrolling, stable item selection, full statement display, provenance details, and contextual keys in tui/internal/ui/review.go and tui/internal/ui/view.go
-- [ ] T024 [P] [US1] Implement comment list/detail navigation, add input, resolve/withdraw reason validation, and target-item return behavior in tui/internal/ui/comments.go
-- [ ] T025 [US1] Connect edit input to preview_edit, show the exact before/after and expiry, submit edit_item with the unchanged token, and discard previews on cancel/stale/navigation in tui/internal/command/review.go and tui/internal/ui/modals.go
-- [ ] T026 [US1] Connect accept, reject, add-comment, resolve, withdraw, and post-approval review mutations to the shared executor and canonical reload flow in tui/internal/command/review.go
-- [ ] T027 [US1] Implement completion blocker presentation, stable-record jump, explicit completion confirmation, and complete_review reload transition in tui/internal/ui/completion.go and tui/internal/command/review.go
-- [ ] T028 [US1] Implement foreground-TTY approval preparation, exact actor/revision/hash/count preview, KeyPress-only fresh challenge input, token disposal rules, and approve_intent submission in tui/internal/ui/approval.go and tui/internal/command/approval.go
-- [ ] T029 [US1] Implement approval success display and verified snapshot inspection navigation in tui/internal/ui/snapshot.go and tui/internal/command/audit.go
-- [ ] T030 [US1] Integrate dashboard-to-review/comments/completion/approval/snapshot navigation and canonical lifecycle refresh in tui/internal/ui/dashboard.go and tui/internal/ui/workspace.go
-- [ ] T031 [US1] Pass the PTY-backed one-process Draft-to-snapshot journey and preserve all existing CLI/skill review and approval tests in tests/integration/fullscreen_review_journey_test.go and tests/integration/approval_safety_test.go
+- [X] T022 [P] [US1] Implement dedicated edit, comment, reject, comment-closure, completion, and approval modal states with explicit phases in tui/internal/ui/modals.go
+- [X] T023 [P] [US1] Implement review list/detail panes, viewport scrolling, stable item selection, full statement display, provenance details, and contextual keys in tui/internal/ui/review.go and tui/internal/ui/view.go
+- [X] T024 [P] [US1] Implement comment list/detail navigation, add input, resolve/withdraw reason validation, and target-item return behavior in tui/internal/ui/comments.go
+- [X] T025 [US1] Connect edit input to preview_edit, show the exact before/after and expiry, submit edit_item with the unchanged token, and discard previews on cancel/stale/navigation in tui/internal/command/review.go and tui/internal/ui/modals.go
+- [X] T026 [US1] Connect accept, reject, add-comment, resolve, withdraw, and post-approval review mutations to the shared executor and canonical reload flow in tui/internal/command/review.go
+- [X] T027 [US1] Implement completion blocker presentation, stable-record jump, explicit completion confirmation, and complete_review reload transition in tui/internal/ui/completion.go and tui/internal/command/review.go
+- [X] T028 [US1] Implement foreground-TTY approval preparation, exact actor/revision/hash/count preview, KeyPress-only fresh challenge input, token disposal rules, and approve_intent submission in tui/internal/ui/approval.go and tui/internal/command/approval.go
+- [X] T029 [US1] Implement approval success display and verified snapshot inspection navigation in tui/internal/ui/snapshot.go and tui/internal/command/audit.go
+- [X] T030 [US1] Integrate dashboard-to-review/comments/completion/approval/snapshot navigation and canonical lifecycle refresh in tui/internal/ui/dashboard.go and tui/internal/ui/workspace.go
+- [X] T031 [US1] Pass the PTY-backed one-process Draft-to-snapshot journey and preserve all existing CLI/skill review and approval tests in tests/integration/fullscreen_review_journey_test.go and tests/integration/approval_safety_test.go
 
 **Checkpoint**: User Story 1 is a usable MVP; Draft-to-Approved-Snapshot requires no shell return and no domain rule exists only in the TUI.
 

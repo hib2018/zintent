@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -14,6 +16,10 @@ type ApprovalModel struct {
 	Challenge, Response, Status                             string
 	Blockers                                                []string
 	Focused                                                 bool
+	TokenID                                                 string
+	ExpiresAt                                               time.Time
+	IncludedCount, ExcludedCount                            int
+	Cancelled                                               bool
 }
 
 func NewApproval(intentID, revisionID, revisionHash, approvedContentHash, challenge string, blockers []string) ApprovalModel {
@@ -25,19 +31,58 @@ func (m ApprovalModel) Init() tea.Cmd  { return nil }
 
 func (m ApprovalModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if key, ok := msg.(tea.KeyPressMsg); ok {
+		if m.Focused {
+			switch key.String() {
+			case "esc":
+				m.Response = ""
+				m.TokenID = ""
+				m.Focused = false
+				m.Cancelled = true
+				m.Status = "approval cancelled"
+			case "backspace":
+				if len(m.Response) > 0 {
+					m.Response = m.Response[:len(m.Response)-1]
+				}
+			case "enter":
+				if m.Ready(time.Now()) {
+					m.Status = "approval confirmation ready"
+				} else {
+					m.Status = "challenge mismatch or expired"
+				}
+			default:
+				if key.Text != "" {
+					m.Response += key.Text
+				}
+			}
+			return m, nil
+		}
 		switch key.String() {
 		case "esc", "q":
 			m.Status = "approval cancelled"
+			m.Response = ""
+			m.TokenID = ""
+			m.Cancelled = true
 		case "enter":
 			if m.Eligible() {
 				m.Focused = true
-				m.Status = "challenge response required in the approval TTY"
+				m.Response = ""
+				m.Status = "type the fresh challenge exactly"
 			} else {
 				m.Status = "approval blocked"
 			}
 		}
 	}
 	return m, nil
+}
+
+func (m ApprovalModel) Ready(now time.Time) bool {
+	return m.Eligible() && m.TokenID != "" && m.Response == m.Challenge && (m.ExpiresAt.IsZero() || now.Before(m.ExpiresAt))
+}
+func (m *ApprovalModel) Invalidate() {
+	m.Response = ""
+	m.TokenID = ""
+	m.Focused = false
+	m.Status = "approval token discarded"
 }
 
 func (m ApprovalModel) View() tea.View {
@@ -58,6 +103,7 @@ func (m ApprovalModel) View() tea.View {
 	b.WriteString("Challenge: ")
 	b.WriteString(m.Challenge)
 	b.WriteString("\n\n")
+	b.WriteString(fmt.Sprintf("Included / excluded: %d / %d\n", m.IncludedCount, m.ExcludedCount))
 	if len(m.Blockers) > 0 {
 		b.WriteString("Blockers:\n")
 		for _, blocker := range m.Blockers {

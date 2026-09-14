@@ -19,7 +19,14 @@ func renderView(m Model) tea.View {
 	b.WriteString(m.Actor)
 	b.WriteString("\n\n")
 
-	for i, item := range m.Items {
+	start, end := 0, len(m.Items)
+	if m.Height > 8 && len(m.Items) > m.Height-8 {
+		visible := m.Height - 8
+		start = max(0, min(m.Selected-visible/2, len(m.Items)-visible))
+		end = start + visible
+	}
+	for i := start; i < end; i++ {
+		item := m.Items[i]
 		if i == m.Selected {
 			b.WriteString("> ")
 		} else {
@@ -42,6 +49,16 @@ func renderView(m Model) tea.View {
 		b.WriteString("\n")
 		b.WriteString(selected.Statement)
 		b.WriteByte('\n')
+		if selected.Provenance != "" {
+			b.WriteString("provenance: ")
+			b.WriteString(selected.Provenance)
+			b.WriteByte('\n')
+		}
+		if selected.Rationale != "" {
+			b.WriteString("rationale: ")
+			b.WriteString(selected.Rationale)
+			b.WriteByte('\n')
+		}
 	}
 	if m.Modal != "" && len(m.Items) > 0 {
 		b.WriteString("\nConfirm ")
@@ -49,6 +66,29 @@ func renderView(m Model) tea.View {
 		b.WriteString(" for ")
 		b.WriteString(m.Items[m.Selected].ID)
 		b.WriteString("? Enter=confirm Esc=cancel\n")
+		if m.PendingAction == "edit-confirm" {
+			b.WriteString("before: ")
+			b.WriteString(m.Before)
+			b.WriteString("\nafter: ")
+			b.WriteString(m.After)
+			b.WriteByte('\n')
+		}
+		if m.Input != "" {
+			b.WriteString("input: ")
+			b.WriteString(m.Input)
+			b.WriteByte('\n')
+		}
+	}
+	if m.PendingAction == "approval-confirm" {
+		b.WriteString("\nRevision hash: ")
+		b.WriteString(m.RevisionHash)
+		b.WriteString("\nApproved content hash: ")
+		b.WriteString(m.ApprovedContentHash)
+		b.WriteString("\nChallenge: ")
+		b.WriteString(m.Challenge)
+		b.WriteString("\nResponse: ")
+		b.WriteString(m.Input)
+		b.WriteByte('\n')
 	}
 	if m.Status != "" {
 		b.WriteString("\n")
@@ -58,6 +98,11 @@ func renderView(m Model) tea.View {
 	if m.ResumeNotice != "" {
 		b.WriteString("\n")
 		b.WriteString(m.ResumeNotice)
+		b.WriteByte('\n')
+	}
+	if m.SnapshotPath != "" {
+		b.WriteString("\nApproved snapshot: ")
+		b.WriteString(m.SnapshotPath)
 		b.WriteByte('\n')
 	}
 	if blockers := m.ResumeBlockers(); len(blockers) > 0 {

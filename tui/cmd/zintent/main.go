@@ -13,6 +13,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/term"
 	"github.com/hib2018/zintent/tui/internal/output"
 	"github.com/hib2018/zintent/tui/internal/protocol"
 	"github.com/hib2018/zintent/tui/internal/runner"
@@ -62,15 +63,10 @@ func run(args []string) error {
 }
 
 func runWorkspace() error {
-	if !stdinIsTerminal() {
+	if !term.IsTerminal(os.Stdin.Fd()) || !term.IsTerminal(os.Stdout.Fd()) {
 		return exitError{5, errors.New("tty_required: workspace requires an interactive terminal")}
 	}
-	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
-	if err != nil {
-		return exitError{5, errors.New("tty_required: workspace terminal unavailable")}
-	}
-	_ = tty.Close()
-	_, err = tea.NewProgram(ui.NewWorkspace()).Run()
+	_, err := tea.NewProgram(ui.NewWorkspace(), tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout)).Run()
 	return err
 }
 

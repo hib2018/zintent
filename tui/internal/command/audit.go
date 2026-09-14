@@ -4,6 +4,8 @@ package command
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/hib2018/zintent/tui/internal/protocol"
 )
 
 // AuditResult is the stable subset consumed by human and JSON frontends.
@@ -11,6 +13,14 @@ type AuditResult struct {
 	Operation string          `json:"operation"`
 	Data      json.RawMessage `json:"data"`
 	Findings  []string        `json:"findings"`
+}
+
+func InspectSnapshotRequest(requestID, intentPath, snapshotID string) (protocol.Request, error) {
+	body, err := json.Marshal(map[string]any{"operation": "inspect_snapshot", "intent_path": intentPath, "snapshot_id": snapshotID})
+	if err != nil {
+		return protocol.Request{}, err
+	}
+	return protocol.Request{ProtocolVersion: protocol.Version, RequestID: requestID, Operation: "inspect_snapshot", PayloadSchema: "zintent.command/1", Payload: body}, nil
 }
 
 // FormatHuman keeps audit output useful without hiding the machine-readable
