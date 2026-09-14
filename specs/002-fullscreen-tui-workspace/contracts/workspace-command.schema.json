@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zintent.local/schema/workspace-command-1.json",
+  "title": "zintent workspace command additions",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/listIntents" },
+    { "$ref": "#/$defs/inspectDraft" },
+    { "$ref": "#/$defs/importDraft" },
+    { "$ref": "#/$defs/intentRead" },
+    { "$ref": "#/$defs/inspectRevision" },
+    { "$ref": "#/$defs/inspectSnapshot" },
+    { "$ref": "#/$defs/cleanup" }
+  ],
+  "$defs": {
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actor_type", "actor_id", "identity_source", "authenticated"],
+      "properties": {
+        "actor_type": { "const": "human" },
+        "actor_id": { "type": "string", "minLength": 1 },
+        "identity_source": { "enum": ["os_user", "explicit_fallback"] },
+        "authenticated": { "const": false }
+      }
+    },
+    "listIntents": {
+      "type": "object", "additionalProperties": false,
+      "required": ["operation", "workspace_path"],
+      "properties": { "operation": { "const": "list_intents" }, "workspace_path": { "type": "string", "minLength": 1 } }
+    },
+    "inspectDraft": {
+      "type": "object", "additionalProperties": false,
+      "required": ["operation", "workspace_path", "source_path", "actor"],
+      "properties": { "operation": { "const": "inspect_draft" }, "workspace_path": { "type": "string", "minLength": 1 }, "source_path": { "type": "string", "minLength": 1 }, "actor": { "$ref": "#/$defs/actor" } }
+    },
+    "importDraft": {
+      "type": "object", "additionalProperties": false,
+      "required": ["operation", "workspace_path", "source_path", "destination", "import_token", "operation_id", "actor"],
+      "properties": { "operation": { "const": "import_draft" }, "workspace_path": { "type": "string", "minLength": 1 }, "source_path": { "type": "string", "minLength": 1 }, "destination": { "type": "string", "minLength": 1 }, "import_token": { "type": "string", "minLength": 1 }, "operation_id": { "type": "string", "minLength": 1 }, "actor": { "$ref": "#/$defs/actor" } }
+    },
+    "intentRead": {
+      "type": "object", "additionalProperties": false,
+      "required": ["operation", "intent_path"],
+      "properties": { "operation": { "enum": ["list_revisions", "recovery_status"] }, "intent_path": { "type": "string", "minLength": 1 } }
+    },
+    "inspectRevision": {
+      "type": "object", "additionalProperties": false,
+      "required": ["operation", "intent_path", "revision_id"],
+      "properties": { "operation": { "const": "inspect_revision" }, "intent_path": { "type": "string", "minLength": 1 }, "revision_id": { "type": "string", "minLength": 1 }, "include_orphan": { "type": "boolean", "default": false } }
+    },
+    "inspectSnapshot": {
+      "type": "object", "additionalProperties": false,
+      "required": ["operation", "intent_path", "snapshot_id"],
+      "properties": { "operation": { "const": "inspect_snapshot" }, "intent_path": { "type": "string", "minLength": 1 }, "snapshot_id": { "type": "string", "minLength": 1 } }
+    },
+    "cleanup": {
+      "type": "object", "additionalProperties": false,
+      "required": ["operation", "intent_path", "expected_revision_id", "expected_head_hash", "recovery_token", "candidate_ids", "operation_id", "actor"],
+      "properties": { "operation": { "const": "cleanup_temporary_files" }, "intent_path": { "type": "string", "minLength": 1 }, "expected_revision_id": { "type": "string", "minLength": 1 }, "expected_head_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" }, "recovery_token": { "type": "string", "minLength": 1 }, "candidate_ids": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }, "operation_id": { "type": "string", "minLength": 1 }, "actor": { "$ref": "#/$defs/actor" } }
+    }
+  }
+}

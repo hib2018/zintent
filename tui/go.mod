@@ -2,11 +2,13 @@ module github.com/hib2018/zintent/tui
 
 go 1.27.1
 
-require charm.land/bubbletea/v2 v2.0.8
+require (
+	charm.land/bubbles/v2 v2.2.1
+	charm.land/bubbletea/v2 v2.0.8
+	charm.land/lipgloss/v2 v2.0.6
+)
 
 require (
-	charm.land/bubbles/v2 v2.2.1 // indirect
-	charm.land/lipgloss/v2 v2.0.6 // indirect
 	github.com/aymanbagabas/go-udiff v0.4.1 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/ultraviolet v0.0.0-20260811164956-006e29f97886 // indirect

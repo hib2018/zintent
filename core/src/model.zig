@@ -139,6 +139,41 @@ pub const Finding = struct {
     message: []const u8,
 };
 
+pub const WorkspaceEntry = struct {
+    intent_id: []const u8,
+    display_name: []const u8,
+    intent_path: []const u8,
+    current_revision_id: ?[]const u8 = null,
+    lifecycle_state: ?Lifecycle = null,
+    blocker_count: usize = 0,
+    approval_state: []const u8 = "unapproved",
+    snapshot_id: ?[]const u8 = null,
+};
+
+pub const RevisionSummary = struct {
+    revision_id: []const u8,
+    parent_revision_id: ?[]const u8,
+    revision_hash: []const u8,
+    operation_type: []const u8,
+    created_at: []const u8,
+    reachable: bool = true,
+};
+
+pub const RecoveryCandidate = struct {
+    candidate_id: []const u8,
+    relative_path: []const u8,
+    kind: []const u8,
+    content_hash: []const u8,
+};
+
+pub const CapabilityBinding = struct {
+    token_id: []const u8,
+    operation: []const u8,
+    actor_id: []const u8,
+    resource_hash: []const u8,
+    expires_at_unix: i64,
+};
+
 pub const Operation = enum {
     protocol_info,
     show_intent,
@@ -155,11 +190,19 @@ pub const Operation = enum {
     complete_review,
     prepare_approval,
     approve_intent,
+    list_intents,
+    inspect_draft,
+    import_draft,
+    list_revisions,
+    inspect_revision,
+    inspect_snapshot,
+    recovery_status,
+    cleanup_temporary_files,
 };
 
 pub fn isMutation(op: Operation) bool {
     return switch (op) {
-        .protocol_info, .show_intent, .validate_intent, .diff_revisions, .preview_edit, .prepare_approval => false,
+        .protocol_info, .show_intent, .validate_intent, .diff_revisions, .preview_edit, .prepare_approval, .list_intents, .inspect_draft, .list_revisions, .inspect_revision, .inspect_snapshot, .recovery_status => false,
         else => true,
     };
 }

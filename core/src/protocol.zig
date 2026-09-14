@@ -66,7 +66,7 @@ pub fn capabilityInfo() struct {
         .affected_ids = &.{},
         .findings = &.{},
         .data = .{
-            .capabilities = &.{ "strict_json", "immutable_revisions", "approval_challenge" },
+            .capabilities = &.{ "strict_json", "immutable_revisions", "approval_challenge", "workspace_listing", "draft_import", "verified_audit", "safe_recovery" },
             .limits = .{ .stream_bytes = max_message_bytes, .deadline_seconds = 10 },
         },
     };

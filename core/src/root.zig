@@ -8,6 +8,10 @@ pub const validation = @import("validation.zig");
 pub const hashing = @import("hashing.zig");
 pub const store = @import("store.zig");
 pub const diff = @import("diff.zig");
+pub const workspace = @import("workspace.zig");
+pub const import = @import("import.zig");
+pub const audit = @import("audit.zig");
+pub const recovery = @import("recovery.zig");
 
 pub const protocol_version = protocol.protocol_version;
 pub const max_message_bytes = protocol.max_message_bytes;

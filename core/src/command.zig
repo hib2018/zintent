@@ -94,6 +94,16 @@ pub const Command = struct {
     from_revision_id: ?[]const u8 = null,
     to_revision_id: ?[]const u8 = null,
     resolution_revision_id: ?[]const u8 = null,
+    workspace_path: ?[]const u8 = null,
+    source_path: ?[]const u8 = null,
+    destination: ?[]const u8 = null,
+    import_token: ?[]const u8 = null,
+    revision_id: ?[]const u8 = null,
+    snapshot_id: ?[]const u8 = null,
+    include_orphan: ?bool = null,
+    expected_head_hash: ?[]const u8 = null,
+    recovery_token: ?[]const u8 = null,
+    candidate_ids: ?[]const []const u8 = null,
 
     pub fn validate(self: Command) !void {
         if (model.isMutation(self.operation)) {
@@ -107,6 +117,13 @@ pub const Command = struct {
             .reject_item => if (self.item_id == null or self.rationale == null) return error.InvalidCommand,
             .prepare_approval => if (self.interactive_tty != true) return error.TtyRequired,
             .approve_intent => if (self.interactive_tty != true or self.confirmation_token == null or self.challenge_response == null) return error.InvalidConfirmation,
+            .list_intents => if (self.workspace_path == null) return error.InvalidCommand,
+            .inspect_draft => if (self.workspace_path == null or self.source_path == null or self.actor == null) return error.InvalidCommand,
+            .import_draft => if (self.workspace_path == null or self.source_path == null or self.destination == null or self.import_token == null) return error.InvalidCommand,
+            .list_revisions, .recovery_status => if (self.intent_path == null) return error.InvalidCommand,
+            .inspect_revision => if (self.intent_path == null or self.revision_id == null) return error.InvalidCommand,
+            .inspect_snapshot => if (self.intent_path == null or self.snapshot_id == null) return error.InvalidCommand,
+            .cleanup_temporary_files => if (self.expected_head_hash == null or self.recovery_token == null or self.candidate_ids == null or self.candidate_ids.?.len == 0) return error.InvalidCommand,
             else => {},
         }
     }
