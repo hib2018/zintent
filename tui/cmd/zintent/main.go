@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -38,6 +39,9 @@ func run(args []string) error {
 		return exitError{5, errors.New("tty_required: review requires an interactive terminal")}
 	}
 	if parsed.interactive {
+		if parsed.operation == "approve_intent" {
+			return runApproval(context.Background(), parsed)
+		}
 		return runReview(context.Background(), parsed)
 	}
 	request := protocol.Request{ProtocolVersion: protocol.Version, RequestID: fmt.Sprintf("cli-%d", time.Now().UnixNano()), Operation: parsed.operation, PayloadSchema: "zintent.command/1", Payload: payload}
@@ -52,6 +56,71 @@ func run(args []string) error {
 		return exitError{errorExit(response.Error.Code), errors.New(response.Error.Message)}
 	}
 	return nil
+}
+
+func runApproval(ctx context.Context, parsed options) error {
+	if !stdinIsTerminal() {
+		return exitError{5, errors.New("tty_required: approval requires an interactive terminal")}
+	}
+	core := runner.Core{Executable: parsed.corePath}
+	actor := parsed.payload["actor"]
+	preparePayload := map[string]any{"operation": "prepare_approval", "intent_path": parsed.payload["intent_path"], "expected_revision_id": parsed.payload["expected_revision_id"], "actor": actor, "interactive_tty": true}
+	prepareBody, err := json.Marshal(preparePayload)
+	if err != nil {
+		return err
+	}
+	prepare, err := core.Run(ctx, protocol.Request{ProtocolVersion: protocol.Version, RequestID: fmt.Sprintf("prepare-%d", time.Now().UnixNano()), Operation: "prepare_approval", PayloadSchema: "zintent.command/1", Payload: prepareBody})
+	if err != nil {
+		return err
+	}
+	if !prepare.OK {
+		return responseError(prepare)
+	}
+	var prepared struct {
+		Data struct {
+			Confirmation struct {
+				TokenID   string `json:"token_id"`
+				Challenge string `json:"challenge"`
+			} `json:"confirmation"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(prepare.Result, &prepared); err != nil {
+		return err
+	}
+	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+	if err != nil {
+		return exitError{5, errors.New("tty_required: approval challenge TTY unavailable")}
+	}
+	defer tty.Close()
+	fmt.Fprintf(tty, "Approval challenge: %s\nType the challenge exactly to approve: ", prepared.Data.Confirmation.Challenge)
+	answer, err := bufio.NewReader(tty).ReadString('\n')
+	if err != nil {
+		return err
+	}
+	answer = strings.TrimSpace(answer)
+	approvePayload := map[string]any{"operation": "approve_intent", "intent_path": parsed.payload["intent_path"], "expected_revision_id": parsed.payload["expected_revision_id"], "operation_id": parsed.payload["operation_id"], "actor": actor, "confirmation_token": prepared.Data.Confirmation.TokenID, "challenge_response": answer, "interactive_tty": true}
+	approveBody, err := json.Marshal(approvePayload)
+	if err != nil {
+		return err
+	}
+	approved, err := core.Run(ctx, protocol.Request{ProtocolVersion: protocol.Version, RequestID: fmt.Sprintf("approve-%d", time.Now().UnixNano()), Operation: "approve_intent", PayloadSchema: "zintent.command/1", Payload: approveBody})
+	if err != nil {
+		return err
+	}
+	if err := output.Write(os.Stdout, approved, parsed.jsonMode); err != nil {
+		return err
+	}
+	if !approved.OK {
+		return responseError(approved)
+	}
+	return nil
+}
+
+func responseError(response protocol.Response) error {
+	if response.Error == nil {
+		return errors.New("operation failed")
+	}
+	return exitError{errorExit(response.Error.Code), errors.New(response.Error.Message)}
 }
 
 func runReview(ctx context.Context, parsed options) error {
@@ -149,18 +218,21 @@ func parseArgs(args []string) (options, error) {
 			}
 			i++
 			o.actorID = args[i]
-		case "--expected-revision", "--operation-id", "--preview-token", "--statement-file", "--reason-file", "--body-file", "--resolution-revision":
+		case "--expected-revision", "--revision", "--operation-id", "--preview-token", "--statement-file", "--reason-file", "--body-file", "--resolution-revision", "--from", "--to":
 			if i+1 >= len(args) {
 				return o, fmt.Errorf("%s requires a value", args[i])
 			}
 			key := map[string]string{
 				"--expected-revision":   "expected_revision_id",
+				"--revision":            "expected_revision_id",
 				"--operation-id":        "operation_id",
 				"--preview-token":       "preview_token",
 				"--statement-file":      "statement_file",
 				"--reason-file":         "reason_file",
 				"--body-file":           "body_file",
 				"--resolution-revision": "resolution_revision_id",
+				"--from":                "from_revision_id",
+				"--to":                  "to_revision_id",
 			}[args[i]]
 			if key == "" {
 				key = strings.TrimPrefix(args[i], "--")
@@ -187,7 +259,7 @@ func parseArgs(args []string) (options, error) {
 	if alias, ok := map[string]string{"edit-preview_item": "preview_edit", "accept_item": "accept_item", "reject_item": "reject_item"}[o.operation]; ok {
 		o.operation = alias
 	}
-	if alias, ok := map[string]string{"complete-review": "complete_review", "start-review": "start_review", "edit-preview": "preview_edit", "accept": "accept_item", "reject": "reject_item", "add": "add_comment", "resolve": "resolve_comment", "withdraw": "withdraw_comment"}[o.operation]; ok {
+	if alias, ok := map[string]string{"complete-review": "complete_review", "start-review": "start_review", "edit-preview": "preview_edit", "accept": "accept_item", "reject": "reject_item", "add": "add_comment", "resolve": "resolve_comment", "withdraw": "withdraw_comment", "approve": "approve_intent"}[o.operation]; ok {
 		o.operation = alias
 	}
 	switch o.operation {
@@ -208,6 +280,12 @@ func parseArgs(args []string) (options, error) {
 	case "review":
 		if len(positionals) != 2 {
 			return o, errors.New("review requires one Intent path")
+		}
+		o.interactive = true
+		o.payload["intent_path"] = positionals[1]
+	case "approve_intent":
+		if len(positionals) != 2 {
+			return o, errors.New("approve requires one Intent path")
 		}
 		o.interactive = true
 		o.payload["intent_path"] = positionals[1]
@@ -305,7 +383,7 @@ func exitCode(err error) int {
 }
 func errorExit(code string) int {
 	switch code {
-	case "invalid_artifact", "unsupported_schema", "duplicate_id", "broken_reference":
+	case "invalid_artifact", "integrity_failure", "unsupported_schema", "duplicate_id", "broken_reference":
 		return 3
 	case "stale_revision", "operation_id_conflict":
 		return 4

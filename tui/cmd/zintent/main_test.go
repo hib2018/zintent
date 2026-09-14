@@ -58,3 +58,20 @@ func TestParseCommentCommandSurface(t *testing.T) {
 		t.Fatalf("unexpected comment command: %#v", o)
 	}
 }
+
+func TestParseApprovalRequiresExactRevisionAndOperation(t *testing.T) {
+	o, err := parseArgs([]string{"approve", "intent", "--revision", "r-1", "--operation-id", "op-1", "--actor-id", "alice"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.operation != "approve_intent" || !o.interactive || o.payload["expected_revision_id"] != "r-1" || o.payload["operation_id"] != "op-1" {
+		t.Fatalf("unexpected approval options: %#v", o)
+	}
+}
+
+func TestApprovalRefusesNonTTY(t *testing.T) {
+	err := run([]string{"approve", "intent", "--revision", "r-1", "--operation-id", "op-1", "--actor-id", "alice"})
+	if err == nil || err.Error() == "" {
+		t.Fatal("expected tty refusal")
+	}
+}

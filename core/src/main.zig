@@ -17,10 +17,16 @@ pub fn main(init: std.process.Init) !void {
     var stdout = std.Io.File.stdout().writer(io, &output_buffer);
     if (request.value.operation == .show_intent or request.value.operation == .validate_intent) {
         try writeIntentResult(allocator, io, request.value, &stdout.interface);
+    } else if (request.value.operation == .diff_revisions) {
+        try writeDiffResult(allocator, io, request.value, &stdout.interface);
     } else if (request.value.operation == .preview_edit) {
         try writePreviewResult(allocator, io, request.value, &stdout.interface);
     } else if (request.value.operation == .start_review or request.value.operation == .accept_item or request.value.operation == .edit_item or request.value.operation == .reject_item or request.value.operation == .add_comment or request.value.operation == .resolve_comment or request.value.operation == .withdraw_comment or request.value.operation == .complete_review) {
         try writeMutationResult(allocator, io, request.value, &stdout.interface);
+    } else if (request.value.operation == .prepare_approval) {
+        try writePrepareApprovalResult(allocator, io, request.value, &stdout.interface);
+    } else if (request.value.operation == .approve_intent) {
+        try writeApproveResult(allocator, io, request.value, &stdout.interface);
     } else {
         try core.protocol.writeResponse(request.value, &stdout.interface);
     }
@@ -38,7 +44,10 @@ fn writePreviewResult(allocator: std.mem.Allocator, io: std.Io, request: core.pr
         .string => |value| value,
         else => return writeFailure(io, request.request_id, "invalid_artifact", "Intent path must be a string."),
     };
-    const bytes = readIntentBytes(allocator, io, path) catch return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact could not be read.");
+    const bytes = readIntentBytes(allocator, io, path) catch |err| switch (err) {
+        error.IntegrityFailure => return writeFailure(io, request.request_id, "integrity_failure", "HEAD does not match the selected revision."),
+        else => return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact could not be read."),
+    };
     defer allocator.free(bytes);
     var parsed = std.json.parseFromSlice(std.json.Value, allocator, bytes, .{ .allocate = .alloc_always }) catch return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact is not valid JSON.");
     defer parsed.deinit();
@@ -99,6 +108,21 @@ fn writePreviewResult(allocator: std.mem.Allocator, io: std.Io, request: core.pr
     const token_input = try std.fmt.allocPrint(allocator, "{s}\x00{s}\x00{s}\x00{s}", .{ expected_revision, item_id, before, proposed });
     defer allocator.free(token_input);
     const token = core.hashing.sha256Hex(token_input);
+    const actor_id = actorID(payload) orelse return writeFailure(io, request.request_id, "missing_actor", "Human actor is required.");
+    const intent_id = intentID(payload_object) orelse return writeFailure(io, request.request_id, "invalid_artifact", "Intent ID is required.");
+    const registry = try capabilityRegistry(allocator, io, path);
+    defer allocator.free(registry);
+    core.store.issueCapability(allocator, io, registry, .{
+        .token_id = &token,
+        .intent_id = intent_id,
+        .expected_revision_id = expected_revision,
+        .actor_id = actor_id,
+        .payload_hash = &token,
+        .expires_at_unix = unixNow(io) + 600,
+    }) catch |err| switch (err) {
+        error.DestinationExists => {},
+        else => return writeFailure(io, request.request_id, "persistence_failure", "Edit preview capability could not be issued."),
+    };
     try std.json.Stringify.value(.{ .protocol_version = core.protocol.protocol_version, .request_id = request.request_id, .ok = true, .result_schema = "zintent.result/1", .result = .{ .contract_version = "1.0.0", .ok = true, .operation = "preview_edit", .affected_ids = &.{item_id}, .findings = &.{}, .data = .{ .preview = .{ .item_id = item_id, .before_statement = before, .after_statement = proposed, .preview_token = &token } } } }, .{}, writer);
 }
 
@@ -112,6 +136,16 @@ fn writeMutationResult(allocator: std.mem.Allocator, io: std.Io, request: core.p
         .string => |value| value,
         else => return writeFailure(io, request.request_id, "invalid_artifact", "Intent path must be a string."),
     };
+    var held_lock: ?core.store.Lock = null;
+    var lock_path: ?[]u8 = null;
+    if (isIntentDirectory(io, path)) {
+        lock_path = try std.fmt.allocPrint(allocator, "{s}/.lock", .{path});
+        held_lock = core.store.acquireLock(io, lock_path.?) catch return writeFailure(io, request.request_id, "persistence_failure", "Intent is locked by another process.");
+    }
+    defer {
+        if (held_lock) |lock| lock.release();
+        if (lock_path) |value| allocator.free(value);
+    }
     const bytes = readIntentBytes(allocator, io, path) catch return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact could not be read.");
     defer allocator.free(bytes);
     var parsed = std.json.parseFromSlice(std.json.Value, allocator, bytes, .{ .allocate = .alloc_always }) catch return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact is not valid JSON.");
@@ -132,17 +166,26 @@ fn writeMutationResult(allocator: std.mem.Allocator, io: std.Io, request: core.p
         .string => |id| id,
         else => "",
     } else "";
+    const incoming_digest = try payloadDigest(allocator, request.payload);
+    if (root.get("operation_id")) |prior_operation| if (prior_operation == .string and std.mem.eql(u8, prior_operation.string, operation_idValue(payload) orelse "")) {
+        const prior_digest = if (root.get("operation")) |operation| if (operation == .object) if (operation.object.get("content_digest")) |digest| if (digest == .string) digest.string else "" else "" else "" else "";
+        if (!std.mem.eql(u8, prior_digest, &incoming_digest)) return writeFailure(io, request.request_id, "operation_id_conflict", "Operation ID was already used with different content.");
+        try writeMutationEnvelope(request, parsed.value, writer);
+        return;
+    };
     core.store.checkExpectedRevision(expected_revision, current_revision) catch return writeFailure(io, request.request_id, "stale_revision", "Expected revision does not match current revision.");
     const operation_id_value = payload.get("operation_id") orelse return writeFailure(io, request.request_id, "invalid_request", "operation_id is required.");
     const operation_id = switch (operation_id_value) {
         .string => |value| value,
         else => return writeFailure(io, request.request_id, "invalid_request", "operation_id must be a string."),
     };
+    const revision_id = operation_id;
     try root.put(allocator, "parent_revision_id", .{ .string = current_revision });
     try root.put(allocator, "operation_id", .{ .string = operation_id });
     if (payload.get("actor")) |actor| try root.put(allocator, "actor", actor);
     var operation_record = try std.json.ObjectMap.init(allocator, &.{}, &.{});
     try operation_record.put(allocator, "type", .{ .string = @tagName(request.operation) });
+    try operation_record.put(allocator, "content_digest", .{ .string = &incoming_digest });
     const target_ids = std.json.Array.init(allocator);
     try operation_record.put(allocator, "target_ids", .{ .array = target_ids });
     try root.put(allocator, "operation", .{ .object = operation_record });
@@ -151,12 +194,13 @@ fn writeMutationResult(allocator: std.mem.Allocator, io: std.Io, request: core.p
         .object => |object| object,
         else => return writeFailure(io, request.request_id, "invalid_artifact", "revision_payload must be an object."),
     };
+    const current_lifecycle = stringFromObject(payload_object, "lifecycle_state") orelse "";
+    if (request.operation != .start_review and request.operation != .complete_review and
+        (std.mem.eql(u8, current_lifecycle, "approved") or std.mem.eql(u8, current_lifecycle, "review_complete")))
+        try payload_object.put(allocator, "lifecycle_state", .{ .string = "in_review" });
     if (request.operation == .start_review) try payload_object.put(allocator, "lifecycle_state", .{ .string = "in_review" });
     if (request.operation == .complete_review) {
-        const items = payload_object.get("items") orelse return writeFailure(io, request.request_id, "approval_ineligible", "items are required.");
-        const comments = payload_object.get("comments") orelse return writeFailure(io, request.request_id, "approval_ineligible", "comments are required.");
-        _ = items;
-        _ = comments;
+        checkApprovalEligibility(payload_object) catch |err| return writeFailure(io, request.request_id, "approval_ineligible", approvalErrorMessage(err));
         try payload_object.put(allocator, "lifecycle_state", .{ .string = "review_complete" });
     }
     if (payload.get("item_id")) |item_id_value| {
@@ -205,11 +249,21 @@ fn writeMutationResult(allocator: std.mem.Allocator, io: std.Io, request: core.p
                             defer allocator.free(token_input);
                             const derived_token = core.hashing.sha256Hex(token_input);
                             if (!std.mem.eql(u8, token, &derived_token)) return writeFailure(io, request.request_id, "invalid_confirmation", "preview_token does not match the requested edit.");
+                            const registry = try capabilityRegistry(allocator, io, path);
+                            defer allocator.free(registry);
+                            var capability = core.store.consumeCapabilityRecord(allocator, io, registry, token, unixNow(io)) catch return writeFailure(io, request.request_id, "invalid_confirmation", "preview_token is expired, consumed, or unknown.");
+                            defer capability.deinit();
+                            const actor_id = actorID(payload) orelse return writeFailure(io, request.request_id, "missing_actor", "Human actor is required.");
+                            const intent_id = intentID(payload_object) orelse return writeFailure(io, request.request_id, "invalid_artifact", "Intent ID is required.");
+                            if (!std.mem.eql(u8, capability.value.intent_id, intent_id) or !std.mem.eql(u8, capability.value.expected_revision_id, expected_revision) or !std.mem.eql(u8, capability.value.actor_id, actor_id) or !std.mem.eql(u8, capability.value.payload_hash, token)) return writeFailure(io, request.request_id, "invalid_confirmation", "preview_token is not bound to this edit.");
                             try item_object.put(allocator, "statement", statement);
                             try item_object.put(allocator, "review_status", .{ .string = "edited" });
                         }
                     },
                     else => {},
+                }
+                if (request.operation == .accept_item or request.operation == .edit_item or request.operation == .reject_item) {
+                    try setHumanProvenance(allocator, &item_object, payload.get("actor") orelse return writeFailure(io, request.request_id, "missing_actor", "Human actor is required."), operation_id, @tagName(request.operation), revision_id);
                 }
                 items.items[item_index] = .{ .object = item_object };
             }
@@ -274,7 +328,6 @@ fn writeMutationResult(allocator: std.mem.Allocator, io: std.Io, request: core.p
         }
         if (!found_comment) return writeFailure(io, request.request_id, "invalid_artifact", "Target comment was not found.");
     }
-    const revision_id = operation_id;
     try root.put(allocator, "revision_id", .{ .string = revision_id });
     var output: std.Io.Writer.Allocating = .init(allocator);
     defer output.deinit();
@@ -283,21 +336,303 @@ fn writeMutationResult(allocator: std.mem.Allocator, io: std.Io, request: core.p
     try root.put(allocator, "revision_hash", .{ .string = &revision_digest });
     output.clearRetainingCapacity();
     try std.json.Stringify.value(parsed.value, .{}, &output.writer);
-    try publishMutation(allocator, io, path, revision_id, output.written(), root);
+    try publishMutation(allocator, io, path, revision_id, output.written(), root, held_lock != null, null);
     try std.json.Stringify.value(.{ .protocol_version = core.protocol.protocol_version, .request_id = request.request_id, .ok = true, .result_schema = "zintent.result/1", .result = .{ .contract_version = "1.0.0", .ok = true, .operation = @tagName(request.operation), .affected_ids = &.{}, .findings = &.{}, .data = .{ .intent = parsed.value } } }, .{}, writer);
 }
 
-fn publishMutation(allocator: std.mem.Allocator, io: std.Io, path: []const u8, revision_id: []const u8, revision_bytes: []const u8, root: std.json.ObjectMap) !void {
+fn setHumanProvenance(allocator: std.mem.Allocator, item: *std.json.ObjectMap, actor: std.json.Value, operation_id: []const u8, operation_type: []const u8, revision_id: []const u8) !void {
+    var provenance = if (item.getPtr("provenance")) |value| switch (value.*) {
+        .object => |object| object,
+        else => try std.json.ObjectMap.init(allocator, &.{}, &.{}),
+    } else try std.json.ObjectMap.init(allocator, &.{}, &.{});
+    try provenance.put(allocator, "content_origin", .{ .string = "human" });
+    try provenance.put(allocator, "operation_actor", actor);
+    try provenance.put(allocator, "operation_id", .{ .string = operation_id });
+    try provenance.put(allocator, "operation_type", .{ .string = operation_type });
+    try provenance.put(allocator, "revision_id", .{ .string = revision_id });
+    try item.put(allocator, "provenance", .{ .object = provenance });
+}
+
+fn checkApprovalEligibility(payload: std.json.ObjectMap) !void {
+    const items_value = payload.get("items") orelse return error.NoIncludedItems;
+    const items = switch (items_value) {
+        .array => |value| value,
+        else => return error.NoIncludedItems,
+    };
+    var included: usize = 0;
+    for (items.items) |item| {
+        if (item != .object) continue;
+        const object = item.object;
+        if (object.get("included_in_approval")) |included_value| if (included_value == .bool and !included_value.bool) continue;
+        included += 1;
+        const status = object.get("review_status") orelse return error.UnreviewedItem;
+        if (status != .string or std.mem.eql(u8, status.string, "unreviewed")) return error.UnreviewedItem;
+    }
+    if (included == 0) return error.NoIncludedItems;
+    const comments_value = payload.get("comments") orelse return error.OpenComment;
+    const comments = switch (comments_value) {
+        .array => |value| value,
+        else => return error.OpenComment,
+    };
+    for (comments.items) |comment| {
+        if (comment != .object) continue;
+        const status = comment.object.get("status") orelse return error.OpenComment;
+        if (status == .string and std.mem.eql(u8, status.string, "open")) return error.OpenComment;
+    }
+}
+
+fn approvalErrorMessage(err: anyerror) []const u8 {
+    return switch (err) {
+        error.UnreviewedItem => "Every included item must be accepted or edited.",
+        error.OpenComment => "Open comments block approval.",
+        error.NoIncludedItems => "At least one included item is required.",
+        else => "Intent is not eligible for approval.",
+    };
+}
+
+fn operation_idValue(payload: std.json.ObjectMap) ?[]const u8 {
+    const value = payload.get("operation_id") orelse return null;
+    return if (value == .string) value.string else null;
+}
+
+fn actorID(payload: std.json.ObjectMap) ?[]const u8 {
+    const actor = payload.get("actor") orelse return null;
+    if (actor != .object) return null;
+    const value = actor.object.get("actor_id") orelse return null;
+    return if (value == .string) value.string else null;
+}
+
+fn intentID(payload: std.json.ObjectMap) ?[]const u8 {
+    const value = payload.get("intent_id") orelse return null;
+    return if (value == .string) value.string else null;
+}
+
+fn capabilityRegistry(allocator: std.mem.Allocator, io: std.Io, intent_path: []const u8) ![]u8 {
+    if (isIntentDirectory(io, intent_path)) return std.fmt.allocPrint(allocator, "{s}/.capabilities", .{intent_path});
+    return std.fmt.allocPrint(allocator, "{s}.capabilities", .{intent_path});
+}
+
+fn unixNow(io: std.Io) i64 {
+    return @intCast(@divTrunc(std.Io.Clock.now(.real, io).nanoseconds, 1_000_000_000));
+}
+
+fn payloadDigest(allocator: std.mem.Allocator, payload: std.json.Value) ![64]u8 {
+    const canonical = try core.hashing.canonicalize(allocator, payload);
+    defer allocator.free(canonical);
+    return core.hashing.sha256Hex(canonical);
+}
+
+fn writeMutationEnvelope(request: core.protocol.Request, value: std.json.Value, writer: *std.Io.Writer) !void {
+    try std.json.Stringify.value(.{ .protocol_version = core.protocol.protocol_version, .request_id = request.request_id, .ok = true, .result_schema = "zintent.result/1", .result = .{ .contract_version = "1.0.0", .ok = true, .operation = @tagName(request.operation), .affected_ids = &.{}, .findings = &.{}, .data = .{ .intent = value } } }, .{}, writer);
+}
+
+fn stringField(object: std.json.ObjectMap, key: []const u8) ?[]const u8 {
+    const value = object.get(key) orelse return null;
+    return if (value == .string) value.string else null;
+}
+
+fn stringFromObject(object: std.json.ObjectMap, key: []const u8) ?[]const u8 {
+    return stringField(object, key);
+}
+
+fn interactiveTTY(payload: std.json.ObjectMap) bool {
+    const value = payload.get("interactive_tty") orelse return false;
+    return value == .bool and value.bool;
+}
+
+fn challengeFor(token: []const u8, approved_hash: []const u8) [12]u8 {
+    var input: [256]u8 = undefined;
+    const length = std.fmt.bufPrint(&input, "{s}\x00{s}", .{ token, approved_hash }) catch unreachable;
+    const digest = core.hashing.sha256Hex(length);
+    var challenge: [12]u8 = undefined;
+    @memcpy(&challenge, digest[0..12]);
+    return challenge;
+}
+
+fn buildApprovedContent(allocator: std.mem.Allocator, payload: std.json.ObjectMap) !std.json.ObjectMap {
+    var approved = try std.json.ObjectMap.init(allocator, &.{}, &.{});
+    if (payload.get("intent_id")) |value| try approved.put(allocator, "intent_id", value);
+    try approved.put(allocator, "schema_version", .{ .string = "1.0.0" });
+    if (payload.get("source_references")) |value| try approved.put(allocator, "source_references", value) else try approved.put(allocator, "source_references", .{ .array = std.json.Array.init(allocator) });
+    const items_value = payload.get("items") orelse return error.NoIncludedItems;
+    const items = switch (items_value) {
+        .array => |value| value,
+        else => return error.NoIncludedItems,
+    };
+    var approved_items = std.json.Array.init(allocator);
+    for (items.items) |item| {
+        if (item != .object) continue;
+        const object = item.object;
+        if (object.get("included_in_approval")) |included| if (included == .bool and !included.bool) continue;
+        var projected = try std.json.ObjectMap.init(allocator, &.{}, &.{});
+        for ([_][]const u8{ "item_id", "kind", "statement", "rationale", "provenance" }) |key| if (object.get(key)) |value| try projected.put(allocator, key, value);
+        try approved_items.append(.{ .object = projected });
+    }
+    try approved.put(allocator, "items", .{ .array = approved_items });
+    return approved;
+}
+
+fn publishApprovedSnapshot(allocator: std.mem.Allocator, io: std.Io, path: []const u8, approved_hash: [64]u8, approved_content: std.json.Value, confirmed_revision: []const u8, confirmed_revision_hash: []const u8, approved_revision_hash: []const u8, approval_id: []const u8, actor_id: []const u8, token_id: []const u8) ![]u8 {
+    const snapshot_name = try std.fmt.allocPrint(allocator, "sha256-{s}.json", .{&approved_hash});
+    defer allocator.free(snapshot_name);
+    const snapshot_path = if (isIntentDirectory(io, path)) try std.fmt.allocPrint(allocator, "{s}/snapshots/{s}", .{ path, snapshot_name }) else try std.fmt.allocPrint(allocator, "{s}.snapshot-{s}", .{ path, snapshot_name });
+    var snapshot_output: std.Io.Writer.Allocating = .init(allocator);
+    defer snapshot_output.deinit();
+    try std.json.Stringify.value(.{ .schema_version = "1.0.0", .snapshot_id = try std.fmt.allocPrint(allocator, "sha256-{s}", .{&approved_hash}), .hash_algorithm = "sha-256", .canonicalization = "jcs-rfc8785", .approved_content = approved_content, .approval = .{ .approval_id = approval_id, .confirmed_revision_id = confirmed_revision, .confirmed_revision_hash = confirmed_revision_hash, .approved_revision_id = approval_id, .approved_revision_hash = approved_revision_hash, .approved_content_hash = &approved_hash, .confirmation_token_id = token_id, .approving_actor = .{ .actor_id = actor_id, .identity_source = "explicit_fallback", .authenticated = false }, .approved_at = "now", .validation_result = .{ .eligible = true, .blocking_findings = &.{} } } }, .{}, &snapshot_output.writer);
+    core.store.publishAtomic(allocator, io, snapshot_path, snapshot_output.written(), true) catch |err| switch (err) {
+        error.DestinationExists => {
+            var existing = std.Io.Dir.cwd().openFile(io, snapshot_path, .{}) catch return error.SnapshotCollision;
+            defer existing.close(io);
+            var buffer: [4096]u8 = undefined;
+            var reader = existing.reader(io, &buffer);
+            const existing_bytes = reader.interface.allocRemaining(allocator, .limited(16 * 1024 * 1024)) catch return error.SnapshotCollision;
+            defer allocator.free(existing_bytes);
+            if (!std.mem.eql(u8, existing_bytes, snapshot_output.written())) return error.SnapshotCollision;
+        },
+        else => return err,
+    };
+    return snapshot_path;
+}
+
+fn writePrepareApprovalResult(allocator: std.mem.Allocator, io: std.Io, request: core.protocol.Request, writer: *std.Io.Writer) !void {
+    const payload = switch (request.payload) {
+        .object => |object| object,
+        else => return writeFailure(io, request.request_id, "invalid_request", "Approval payload must be an object."),
+    };
+    if (!interactiveTTY(payload)) return writeFailure(io, request.request_id, "tty_required", "Approval preparation requires an interactive TTY.");
+    const path = stringField(payload, "intent_path") orelse return writeFailure(io, request.request_id, "invalid_request", "Intent path is required.");
+    const expected = stringField(payload, "expected_revision_id") orelse return writeFailure(io, request.request_id, "invalid_request", "revision is required.");
+    const actor_id = actorID(payload) orelse return writeFailure(io, request.request_id, "missing_actor", "Human actor is required.");
+    const bytes = readIntentBytes(allocator, io, path) catch return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact could not be read.");
+    defer allocator.free(bytes);
+    var parsed = std.json.parseFromSlice(std.json.Value, allocator, bytes, .{ .allocate = .alloc_always }) catch return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact is not valid JSON.");
+    defer parsed.deinit();
+    const root = switch (parsed.value) {
+        .object => |object| object,
+        else => return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact must be an object."),
+    };
+    const current = stringFromObject(root, "revision_id") orelse stringFromObject(root, "current_revision_id") orelse "";
+    core.store.checkExpectedRevision(expected, current) catch return writeFailure(io, request.request_id, "stale_revision", "Expected revision does not match current revision.");
+    const revision_payload = root.get("revision_payload") orelse return writeFailure(io, request.request_id, "invalid_artifact", "revision_payload is required.");
+    const payload_object = switch (revision_payload) {
+        .object => |object| object,
+        else => return writeFailure(io, request.request_id, "invalid_artifact", "revision_payload must be an object."),
+    };
+    const lifecycle = stringFromObject(payload_object, "lifecycle_state") orelse "";
+    if (!std.mem.eql(u8, lifecycle, "review_complete")) return writeFailure(io, request.request_id, "approval_ineligible", "Intent must be review_complete before approval.");
+    checkApprovalEligibility(payload_object) catch |err| return writeFailure(io, request.request_id, "approval_ineligible", approvalErrorMessage(err));
+    const approved_content = try buildApprovedContent(allocator, payload_object);
+    const canonical = try core.hashing.canonicalize(allocator, .{ .object = approved_content });
+    defer allocator.free(canonical);
+    const approved_hash = core.hashing.sha256Hex(canonical);
+    const token_input = try std.fmt.allocPrint(allocator, "{s}\x00{s}\x00{s}", .{ current, actor_id, &approved_hash });
+    defer allocator.free(token_input);
+    const token_id = core.hashing.sha256Hex(token_input);
+    const challenge = challengeFor(&token_id, &approved_hash);
+    const registry = try capabilityRegistry(allocator, io, path);
+    defer allocator.free(registry);
+    core.store.issueCapability(allocator, io, registry, .{ .token_id = &token_id, .intent_id = intentID(payload_object) orelse "", .expected_revision_id = current, .actor_id = actor_id, .payload_hash = &approved_hash, .expires_at_unix = unixNow(io) + 600 }) catch |err| switch (err) {
+        error.DestinationExists => {},
+        else => return writeFailure(io, request.request_id, "persistence_failure", "Approval challenge could not be issued."),
+    };
+    try std.json.Stringify.value(.{ .protocol_version = core.protocol.protocol_version, .request_id = request.request_id, .ok = true, .result_schema = "zintent.result/1", .result = .{ .contract_version = "1.0.0", .ok = true, .operation = "prepare_approval", .affected_ids = &.{current}, .findings = &.{}, .data = .{ .confirmation = .{ .token_id = &token_id, .confirmed_revision_id = current, .confirmed_revision_hash = stringFromObject(root, "revision_hash") orelse "", .approved_content_hash = &approved_hash, .actor_id = actor_id, .challenge = &challenge, .interactive_tty = true, .consumed = false } } } }, .{}, writer);
+}
+
+fn writeApproveResult(allocator: std.mem.Allocator, io: std.Io, request: core.protocol.Request, writer: *std.Io.Writer) !void {
+    const payload = switch (request.payload) {
+        .object => |object| object,
+        else => return writeFailure(io, request.request_id, "invalid_request", "Approval payload must be an object."),
+    };
+    if (!interactiveTTY(payload)) return writeFailure(io, request.request_id, "tty_required", "Approval requires an interactive TTY.");
+    const path = stringField(payload, "intent_path") orelse return writeFailure(io, request.request_id, "invalid_request", "Intent path is required.");
+    const expected = stringField(payload, "expected_revision_id") orelse return writeFailure(io, request.request_id, "invalid_request", "revision is required.");
+    const actor_id = actorID(payload) orelse return writeFailure(io, request.request_id, "missing_actor", "Human actor is required.");
+    const token = stringField(payload, "confirmation_token") orelse return writeFailure(io, request.request_id, "invalid_confirmation", "confirmation_token is required.");
+    const response = stringField(payload, "challenge_response") orelse return writeFailure(io, request.request_id, "invalid_confirmation", "challenge_response is required.");
+    const bytes = readIntentBytes(allocator, io, path) catch return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact could not be read.");
+    defer allocator.free(bytes);
+    var parsed = std.json.parseFromSlice(std.json.Value, allocator, bytes, .{ .allocate = .alloc_always }) catch return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact is not valid JSON.");
+    defer parsed.deinit();
+    var root = switch (parsed.value) {
+        .object => |object| object,
+        else => return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact must be an object."),
+    };
+    const current = stringFromObject(root, "revision_id") orelse "";
+    core.store.checkExpectedRevision(expected, current) catch return writeFailure(io, request.request_id, "stale_revision", "Expected revision does not match current revision.");
+    const revision_payload = root.getPtr("revision_payload") orelse return writeFailure(io, request.request_id, "invalid_artifact", "revision_payload is required.");
+    var payload_object = switch (revision_payload.*) {
+        .object => |object| object,
+        else => return writeFailure(io, request.request_id, "invalid_artifact", "revision_payload must be an object."),
+    };
+    checkApprovalEligibility(payload_object) catch |err| return writeFailure(io, request.request_id, "approval_ineligible", approvalErrorMessage(err));
+    const approved_content = try buildApprovedContent(allocator, payload_object);
+    const canonical = try core.hashing.canonicalize(allocator, .{ .object = approved_content });
+    defer allocator.free(canonical);
+    const approved_hash = core.hashing.sha256Hex(canonical);
+    const registry = try capabilityRegistry(allocator, io, path);
+    defer allocator.free(registry);
+    var capability = core.store.consumeCapabilityRecord(allocator, io, registry, token, unixNow(io)) catch return writeFailure(io, request.request_id, "invalid_confirmation", "Approval challenge is expired, consumed, or unknown.");
+    defer capability.deinit();
+    if (!std.mem.eql(u8, capability.value.expected_revision_id, current) or !std.mem.eql(u8, capability.value.actor_id, actor_id) or !std.mem.eql(u8, capability.value.payload_hash, &approved_hash) or !std.mem.eql(u8, response, &challengeFor(token, &approved_hash))) return writeFailure(io, request.request_id, "invalid_confirmation", "Approval challenge does not match this revision.");
+    const operation_id = stringField(payload, "operation_id") orelse token;
+    try root.put(allocator, "parent_revision_id", .{ .string = current });
+    try root.put(allocator, "revision_id", .{ .string = operation_id });
+    try root.put(allocator, "operation_id", .{ .string = operation_id });
+    try payload_object.put(allocator, "lifecycle_state", .{ .string = "approved" });
+    var operation = try std.json.ObjectMap.init(allocator, &.{}, &.{});
+    try operation.put(allocator, "type", .{ .string = "approve_intent" });
+    try operation.put(allocator, "target_ids", .{ .array = std.json.Array.init(allocator) });
+    try root.put(allocator, "operation", .{ .object = operation });
+    var output: std.Io.Writer.Allocating = .init(allocator);
+    defer output.deinit();
+    try std.json.Stringify.value(parsed.value, .{}, &output.writer);
+    const approved_revision_hash = core.hashing.sha256Hex(output.written());
+    try root.put(allocator, "revision_hash", .{ .string = &approved_revision_hash });
+    output.clearRetainingCapacity();
+    try std.json.Stringify.value(parsed.value, .{}, &output.writer);
+    const snapshot_id = publishApprovedSnapshot(allocator, io, path, approved_hash, .{ .object = approved_content }, current, stringFromObject(root, "revision_hash") orelse "", &approved_revision_hash, operation_id, actor_id, token) catch return writeFailure(io, request.request_id, "persistence_failure", "Approved snapshot could not be published.");
+    defer allocator.free(snapshot_id);
+    try publishMutation(allocator, io, path, operation_id, output.written(), root, false, snapshot_id);
+    const snapshot_id_string: []const u8 = snapshot_id;
+    var response_data = try std.json.ObjectMap.init(allocator, &.{}, &.{});
+    try response_data.put(allocator, "snapshot", .{ .string = snapshot_id_string });
+    try response_data.put(allocator, "snapshot_path", .{ .string = snapshot_id_string });
+    var affected = std.json.Array.init(allocator);
+    try affected.append(.{ .string = operation_id });
+    const findings = std.json.Array.init(allocator);
+    var result = try std.json.ObjectMap.init(allocator, &.{}, &.{});
+    try result.put(allocator, "contract_version", .{ .string = "1.0.0" });
+    try result.put(allocator, "ok", .{ .bool = true });
+    try result.put(allocator, "operation", .{ .string = "approve_intent" });
+    try result.put(allocator, "affected_ids", .{ .array = affected });
+    try result.put(allocator, "findings", .{ .array = findings });
+    try result.put(allocator, "data", .{ .object = response_data });
+    var envelope = try std.json.ObjectMap.init(allocator, &.{}, &.{});
+    try envelope.put(allocator, "protocol_version", .{ .string = core.protocol.protocol_version });
+    try envelope.put(allocator, "request_id", .{ .string = request.request_id });
+    try envelope.put(allocator, "ok", .{ .bool = true });
+    try envelope.put(allocator, "result_schema", .{ .string = "zintent.result/1" });
+    try envelope.put(allocator, "result", .{ .object = result });
+    try std.json.Stringify.value(std.json.Value{ .object = envelope }, .{}, writer);
+}
+
+fn publishMutation(allocator: std.mem.Allocator, io: std.Io, path: []const u8, revision_id: []const u8, revision_bytes: []const u8, root: std.json.ObjectMap, lock_already_held: bool, approved_snapshot_ref: ?[]const u8) !void {
     var directory = std.Io.Dir.cwd().openDir(io, path, .{}) catch |err| switch (err) {
         error.NotDir, error.FileNotFound => null,
         else => return err,
     };
     if (directory) |*dir| {
         dir.close(io);
-        const lock_path = try std.fmt.allocPrint(allocator, "{s}/.lock", .{path});
-        defer allocator.free(lock_path);
-        var lock = try core.store.acquireLock(io, lock_path);
-        defer lock.release();
+        var lock_path: ?[]u8 = null;
+        var lock: ?core.store.Lock = null;
+        if (!lock_already_held) {
+            lock_path = try std.fmt.allocPrint(allocator, "{s}/.lock", .{path});
+            lock = try core.store.acquireLock(io, lock_path.?);
+        }
+        defer {
+            if (lock) |value| value.release();
+            if (lock_path) |value| allocator.free(value);
+        }
         const revision_path = try std.fmt.allocPrint(allocator, "{s}/revisions/{s}.json", .{ path, revision_id });
         defer allocator.free(revision_path);
         const head_path = try std.fmt.allocPrint(allocator, "{s}/HEAD.json", .{path});
@@ -309,7 +644,7 @@ fn publishMutation(allocator: std.mem.Allocator, io: std.Io, path: []const u8, r
         const lifecycle = if (root.get("revision_payload")) |payload| if (payload == .object) if (payload.object.get("lifecycle_state")) |state| if (state == .string) state.string else "draft" else "draft" else "draft" else "draft";
         var head_output: std.Io.Writer.Allocating = .init(allocator);
         defer head_output.deinit();
-        try std.json.Stringify.value(.{ .schema_version = "1.0.0", .intent_id = intent_id, .current_revision_id = revision_id, .current_revision_hash = &hash, .lifecycle_state = lifecycle, .approved_snapshot_ref = null }, .{}, &head_output.writer);
+        try std.json.Stringify.value(.{ .schema_version = "1.0.0", .intent_id = intent_id, .current_revision_id = revision_id, .current_revision_hash = &hash, .lifecycle_state = lifecycle, .approved_snapshot_ref = approved_snapshot_ref }, .{}, &head_output.writer);
         try core.store.publishRevisionAndHead(allocator, io, revision_path, revision_bytes, head_path, head_output.written());
         try core.store.publishAtomic(allocator, io, intent_path, revision_bytes, false);
         return;
@@ -327,7 +662,10 @@ fn writeIntentResult(allocator: std.mem.Allocator, io: std.Io, request: core.pro
         .string => |value| value,
         else => return writeFailure(io, request.request_id, "invalid_artifact", "Intent path must be a string."),
     };
-    const bytes = readIntentBytes(allocator, io, path) catch return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact could not be read.");
+    const bytes = readIntentBytes(allocator, io, path) catch |err| switch (err) {
+        error.IntegrityFailure => return writeFailure(io, request.request_id, "integrity_failure", "HEAD does not match the selected revision."),
+        else => return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact could not be read."),
+    };
     defer allocator.free(bytes);
     var parsed = std.json.parseFromSlice(std.json.Value, allocator, bytes, .{ .allocate = .alloc_always }) catch
         return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact is not valid JSON.");
@@ -351,19 +689,86 @@ fn writeIntentResult(allocator: std.mem.Allocator, io: std.Io, request: core.pro
     }, .{}, writer);
 }
 
-fn readIntentBytes(allocator: std.mem.Allocator, io: std.Io, path: []const u8) ![]u8 {
-    var file = std.Io.Dir.cwd().openFile(io, path, .{}) catch |err| switch (err) {
-        error.IsDir => blk: {
-            const nested = try std.fmt.allocPrint(allocator, "{s}/intent.json", .{path});
-            defer allocator.free(nested);
-            break :blk try std.Io.Dir.cwd().openFile(io, nested, .{});
-        },
-        else => return err,
+fn writeDiffResult(allocator: std.mem.Allocator, io: std.Io, request: core.protocol.Request, writer: *std.Io.Writer) !void {
+    const payload = switch (request.payload) {
+        .object => |object| object,
+        else => return writeFailure(io, request.request_id, "invalid_request", "Diff payload must be an object."),
     };
+    const path = stringField(payload, "intent_path") orelse return writeFailure(io, request.request_id, "invalid_request", "Intent path is required.");
+    const current_bytes = readIntentBytes(allocator, io, path) catch |err| switch (err) {
+        error.IntegrityFailure => return writeFailure(io, request.request_id, "integrity_failure", "HEAD does not match the selected revision."),
+        else => return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact could not be read."),
+    };
+    defer allocator.free(current_bytes);
+    var current = std.json.parseFromSlice(std.json.Value, allocator, current_bytes, .{ .allocate = .alloc_always }) catch return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact is not valid JSON.");
+    defer current.deinit();
+    var before = current.value;
+    const from_id = stringField(payload, "from_revision_id");
+    const to_id = stringField(payload, "to_revision_id");
+    const target_id = to_id orelse stringFromValue(current.value, "revision_id") orelse "";
+    if (isIntentDirectory(io, path) and from_id != null) {
+        if (readRevisionValue(allocator, io, path, from_id.?)) |parsed| {
+            before = parsed.value;
+            // parsed is intentionally retained by the arena allocator for this request.
+        } else |_| return writeFailure(io, request.request_id, "invalid_artifact", "Requested source revision could not be read.");
+    } else if (isIntentDirectory(io, path) and to_id != null and !std.mem.eql(u8, target_id, stringFromValue(current.value, "revision_id") orelse "")) {
+        if (readRevisionValue(allocator, io, path, target_id)) |parsed| {
+            current.value = parsed.value;
+        } else |_| return writeFailure(io, request.request_id, "invalid_artifact", "Requested target revision could not be read.");
+    }
+    const changes = core.diff.itemChanges(allocator, before, current.value) catch return writeFailure(io, request.request_id, "invalid_artifact", "Revisions could not be compared.");
+    var data = try std.json.ObjectMap.init(allocator, &.{}, &.{});
+    try data.put(allocator, "from_revision_id", .{ .string = from_id orelse "" });
+    try data.put(allocator, "to_revision_id", .{ .string = target_id });
+    try data.put(allocator, "changes", .{ .array = changes });
+    var result = try std.json.ObjectMap.init(allocator, &.{}, &.{});
+    try result.put(allocator, "contract_version", .{ .string = "1.0.0" });
+    try result.put(allocator, "ok", .{ .bool = true });
+    try result.put(allocator, "operation", .{ .string = "diff_revisions" });
+    try result.put(allocator, "affected_ids", .{ .array = std.json.Array.init(allocator) });
+    try result.put(allocator, "findings", .{ .array = std.json.Array.init(allocator) });
+    try result.put(allocator, "data", .{ .object = data });
+    var envelope = try std.json.ObjectMap.init(allocator, &.{}, &.{});
+    try envelope.put(allocator, "protocol_version", .{ .string = core.protocol.protocol_version });
+    try envelope.put(allocator, "request_id", .{ .string = request.request_id });
+    try envelope.put(allocator, "ok", .{ .bool = true });
+    try envelope.put(allocator, "result_schema", .{ .string = "zintent.result/1" });
+    try envelope.put(allocator, "result", .{ .object = result });
+    try std.json.Stringify.value(std.json.Value{ .object = envelope }, .{}, writer);
+}
+
+fn readRevisionValue(allocator: std.mem.Allocator, io: std.Io, intent_dir: []const u8, revision_id: []const u8) !std.json.Parsed(std.json.Value) {
+    const path = try std.fmt.allocPrint(allocator, "{s}/revisions/{s}.json", .{ intent_dir, revision_id });
+    defer allocator.free(path);
+    const bytes = try readIntentBytes(allocator, io, path);
+    defer allocator.free(bytes);
+    return std.json.parseFromSlice(std.json.Value, allocator, bytes, .{ .allocate = .alloc_always });
+}
+
+fn stringFromValue(value: std.json.Value, key: []const u8) ?[]const u8 {
+    const object = switch (value) {
+        .object => |o| o,
+        else => return null,
+    };
+    return if (object.get(key)) |field| if (field == .string) field.string else null else null;
+}
+
+fn readIntentBytes(allocator: std.mem.Allocator, io: std.Io, path: []const u8) ![]u8 {
+    if (isIntentDirectory(io, path)) {
+        const verified = try core.store.loadVerifiedRevision(allocator, io, path);
+        return verified.bytes;
+    }
+    var file = try std.Io.Dir.cwd().openFile(io, path, .{});
     defer file.close(io);
     var buffer: [4096]u8 = undefined;
     var reader = file.reader(io, &buffer);
     return reader.interface.allocRemaining(allocator, .limited(core.max_message_bytes));
+}
+
+fn isIntentDirectory(io: std.Io, path: []const u8) bool {
+    var directory = std.Io.Dir.cwd().openDir(io, path, .{}) catch return false;
+    directory.close(io);
+    return true;
 }
 
 fn writeValidationFailure(io: std.Io, request_id: []const u8, err: anyerror) !void {

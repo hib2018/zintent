@@ -92,6 +92,28 @@ pub const Revision = struct {
     revision_payload: RevisionPayload,
 };
 
+pub const Approval = struct {
+    approval_id: []const u8,
+    confirmed_revision_id: []const u8,
+    confirmed_revision_hash: []const u8,
+    approved_revision_id: []const u8,
+    approved_revision_hash: []const u8,
+    approved_content_hash: []const u8,
+    confirmation_token_id: []const u8,
+    approving_actor: Actor,
+    approved_at: []const u8,
+    validation_result: struct { eligible: bool, blocking_findings: []const []const u8 },
+};
+
+pub const ApprovedSnapshot = struct {
+    schema_version: []const u8,
+    snapshot_id: []const u8,
+    hash_algorithm: []const u8,
+    canonicalization: []const u8,
+    approved_content: std.json.Value,
+    approval: Approval,
+};
+
 pub fn newItem(item_id: []const u8, kind: []const u8, statement: []const u8, provenance: Provenance) Item {
     return .{ .item_id = item_id, .kind = kind, .statement = statement, .provenance = provenance };
 }

@@ -89,14 +89,14 @@ stale or invalid actions create no reachable revision. Deep chain inspection rem
 - [X] T028 [P] [US1] Implement strict Intent revision decoding and structural/referential validation in core/src/validation.zig
 - [X] T029 [P] [US1] Implement Draft, Intent Item, Comment, Revision, and HEAD manifest domain constructors in core/src/model.zig
 - [X] T030 [US1] Implement start_review, accept_item, preview_edit, capability-bound edit_item, reject_item, add_comment, resolve_comment, and withdraw_comment transition rules in core/src/transition.zig
-- [ ] T031 [US1] Implement independent ContentOrigin plus mechanically derived human OperationActor provenance, UUID v7 allocation, operation idempotency, capability issuance/consumption, and parent revision creation in core/src/command.zig
-- [ ] T032 [US1] Integrate review mutations with lock/revalidate/publish/HEAD-last storage flow and verified HEAD loading needed to reopen the current review in core/src/store.zig and core/src/main.zig
+- [X] T031 [US1] Implement independent ContentOrigin plus mechanically derived human OperationActor provenance, UUID v7 allocation, operation idempotency, capability issuance/consumption, and parent revision creation in core/src/command.zig
+- [X] T032 [US1] Integrate review mutations with lock/revalidate/publish/HEAD-last storage flow and verified HEAD loading needed to reopen the current review in core/src/store.zig and core/src/main.zig
 - [X] T033 [P] [US1] Implement Go CLI subcommands for validate, show, item accept/edit-preview/edit/reject, and comment add/resolve/withdraw, requiring the preview token on edit apply, in tui/internal/command/review.go
 - [X] T034 [P] [US1] Implement the pure Bubble Tea review model, messages, and update reducer with no filesystem mutation in tui/internal/ui/review.go
 - [X] T035 [US1] Implement Hunk-style header, item list, before/after detail, findings footer, narrow layout, and keyboard help in tui/internal/ui/view.go
 - [X] T036 [US1] Connect TUI edit preview and all confirmed actions to the bounded Zig runner, consume the exact preview token, reload canonical state after success, and never replay stale mutations in tui/internal/ui/commands.go
 - [X] T037 [US1] Implement verified HEAD reopening, immediate persistence, safe quit summary, terminal restoration, and TTY refusal behavior in tui/cmd/zintent/main.go
-- [ ] T038 [US1] Create .agents/skills/zintent-catalog.md and register the zintent-review skill; create its explicit artifact contract, allowed CLI calls, exclusions, and blocker summary behavior in .agents/skills/zintent-review/SKILL.md
+- [X] T038 [US1] Create .agents/skills/zintent-catalog.md and register the zintent-review skill; create its explicit artifact contract, allowed CLI calls, exclusions, and blocker summary behavior in .agents/skills/zintent-review/SKILL.md
 
 **Checkpoint**: User Story 1 is a usable MVP for item-level human intervention and is independently
 demonstrable without approval or downstream adapters.
@@ -114,21 +114,21 @@ idempotent retry, and invalidation after a later working change.
 
 ### Tests for User Story 2
 
-- [ ] T039 [P] [US2] Write failing review-completion and approval eligibility matrix tests for all blockers in core/tests/approval.zig
-- [ ] T040 [P] [US2] Write failing approved-content projection and snapshot hash golden tests in core/tests/hashing.zig
-- [ ] T041 [P] [US2] Write failing snapshot exclusive-create, collision, idempotent retry, orphan, and HEAD publication failure tests in core/tests/persistence_failure.zig
-- [ ] T042 [P] [US2] Write failing CLI and protocol tests for complete-review, prepare_approval, challenge mismatch/expiry/reuse/staleness, non-TTY refusal, and approval error envelopes in tests/integration/approval_safety_test.go
-- [ ] T043 [P] [US2] Write failing TUI blocker display, disabled approval, exact-revision/hash preview, fresh challenge response, and cancellation tests in tui/internal/ui/approval_test.go
+- [X] T039 [P] [US2] Write failing review-completion and approval eligibility matrix tests for all blockers in core/tests/approval.zig
+- [X] T040 [P] [US2] Write failing approved-content projection and snapshot hash golden tests in core/tests/hashing.zig
+- [X] T041 [P] [US2] Write failing snapshot exclusive-create, collision, idempotent retry, orphan, and HEAD publication failure tests in core/tests/persistence_failure.zig
+- [X] T042 [P] [US2] Write failing CLI and protocol tests for complete-review, prepare_approval, challenge mismatch/expiry/reuse/staleness, non-TTY refusal, and approval error envelopes in tests/integration/approval_safety_test.go
+- [X] T043 [P] [US2] Write failing TUI blocker display, disabled approval, exact-revision/hash preview, fresh challenge response, and cancellation tests in tui/internal/ui/approval_test.go
 
 ### Implementation for User Story 2
 
-- [ ] T044 [P] [US2] Add Approval with confirmed and approved revision lineage, validation result, approved content, and snapshot envelope types in core/src/model.zig
-- [ ] T045 [US2] Implement complete_review eligibility, approval as a new approved child revision, and normal review mutation from review_complete or approved into in_review in core/src/transition.zig
-- [ ] T046 [US2] Implement prepare_approval and approve_intent with TTY-only one-use challenge issuance/consumption, locked revalidation, confirmed-to-approved revision binding, canonical projections, and approved-content hashing in core/src/command.zig and core/src/hashing.zig
-- [ ] T047 [US2] Implement content-addressed snapshot exclusive publication, equivalence checks, and HEAD approved reference update in core/src/store.zig
-- [ ] T048 [P] [US2] Implement Go complete-review and approve CLI commands; approval must prepare, display, and read the challenge directly from the same TTY, reject non-TTY use, and expose no confirmation flag/stdin substitute in tui/internal/command/approval.go
-- [ ] T049 [US2] Implement TUI completion blockers, exact snapshot preview, fresh typed challenge response, cancellation, and approval result display in tui/internal/ui/approval.go
-- [ ] T050 [US2] Register zintent-approve in .agents/skills/zintent-catalog.md and create its eligible input contract, structured findings, and snapshot output in .agents/skills/zintent-approve/SKILL.md; require it to launch but never answer or synthesize the interactive confirmation
+- [X] T044 [P] [US2] Add Approval with confirmed and approved revision lineage, validation result, approved content, and snapshot envelope types in core/src/model.zig
+- [X] T045 [US2] Implement complete_review eligibility, approval as a new approved child revision, and normal review mutation from review_complete or approved into in_review in core/src/transition.zig
+- [X] T046 [US2] Implement prepare_approval and approve_intent with TTY-only one-use challenge issuance/consumption, locked revalidation, confirmed-to-approved revision binding, canonical projections, and approved-content hashing in core/src/command.zig and core/src/hashing.zig
+- [X] T047 [US2] Implement content-addressed snapshot exclusive publication, equivalence checks, and HEAD approved reference update in core/src/store.zig
+- [X] T048 [P] [US2] Implement Go complete-review and approve CLI commands; approval must prepare, display, and read the challenge directly from the same TTY, reject non-TTY use, and expose no confirmation flag/stdin substitute in tui/internal/command/approval.go
+- [X] T049 [US2] Implement TUI completion blockers, exact snapshot preview, fresh typed challenge response, cancellation, and approval result display in tui/internal/ui/approval.go
+- [X] T050 [US2] Register zintent-approve in .agents/skills/zintent-catalog.md and create its eligible input contract, structured findings, and snapshot output in .agents/skills/zintent-approve/SKILL.md; require it to launch but never answer or synthesize the interactive confirmation
 
 **Checkpoint**: User Story 2 independently converts an eligible reviewed Intent into a verified,
 immutable snapshot and refuses every unapproved path.
@@ -146,19 +146,19 @@ that corrupt HEAD targets and interrupted writes fail safely without losing the 
 
 ### Tests for User Story 3
 
-- [ ] T051 [P] [US3] Write failing revision-chain, HEAD/hash integrity, orphan, and temporary-file recovery tests in core/tests/recovery.zig
-- [ ] T052 [P] [US3] Write failing deterministic item-aware revision diff tests in core/tests/diff.zig
-- [ ] T053 [P] [US3] Write failing show, validate, and diff JSON contract tests including corrupt-store findings in tests/integration/audit_cli_test.go
-- [ ] T054 [P] [US3] Write failing TUI resume-selection, remaining-blocker summary, and normal post-approval mutation-to-in_review tests in tui/internal/ui/resume_test.go
-- [ ] T055 [US3] Write the failing process-restart resumption and crash-recovery journey in tests/integration/crash_recovery_test.go
+- [X] T051 [P] [US3] Write failing revision-chain, HEAD/hash integrity, orphan, and temporary-file recovery tests in core/tests/recovery.zig
+- [X] T052 [P] [US3] Write failing deterministic item-aware revision diff tests in core/tests/diff.zig
+- [X] T053 [P] [US3] Write failing show, validate, and diff JSON contract tests including corrupt-store findings in tests/integration/audit_cli_test.go
+- [X] T054 [P] [US3] Write failing TUI resume-selection, remaining-blocker summary, and normal post-approval mutation-to-in_review tests in tui/internal/ui/resume_test.go
+- [X] T055 [US3] Write the failing process-restart resumption and crash-recovery journey in tests/integration/crash_recovery_test.go
 
 ### Implementation for User Story 3
 
-- [ ] T056 [P] [US3] Implement verified HEAD loading, revision-chain traversal, orphan reporting, and safe temporary cleanup in core/src/store.zig
-- [ ] T057 [P] [US3] Implement item-aware revision comparisons and auditable change records in core/src/diff.zig
-- [ ] T058 [US3] Implement show_intent, validate_intent, and diff_revisions protocol operations with actionable integrity findings in core/src/main.zig
-- [ ] T059 [P] [US3] Implement Go show, validate, and diff presentation for human and JSON modes in tui/internal/command/audit.go
-- [ ] T060 [US3] Restore TUI state from canonical artifacts, select by stable item ID, summarize remaining blockers, and present the normal governed mutation that creates an in_review child of an approved Intent in tui/internal/ui/review.go
+- [X] T056 [P] [US3] Implement verified HEAD loading, revision-chain traversal, orphan reporting, and safe temporary cleanup in core/src/store.zig
+- [X] T057 [P] [US3] Implement item-aware revision comparisons and auditable change records in core/src/diff.zig
+- [X] T058 [US3] Implement show_intent, validate_intent, and diff_revisions protocol operations with actionable integrity findings in core/src/main.zig
+- [X] T059 [P] [US3] Implement Go show, validate, and diff presentation for human and JSON modes in tui/internal/command/audit.go
+- [X] T060 [US3] Restore TUI state from canonical artifacts, select by stable item ID, summarize remaining blockers, and present the normal governed mutation that creates an in_review child of an approved Intent in tui/internal/ui/review.go
 
 **Checkpoint**: All three stories work across process restarts and expose a complete, verifiable
 history without conversational memory.
@@ -169,14 +169,14 @@ history without conversational memory.
 
 **Purpose**: Close performance, portability, documentation, and constitutional quality gates.
 
-- [ ] T061 [P] Add generated 1,000-record and 10 MiB Intent fixtures plus timing assertions in tests/fixtures/large/ and tests/integration/performance_test.go
-- [ ] T062 [P] Add protocol fuzz/property tests for malformed lengths, UTF-8, duplicate names, unknown fields, and extra stdout in core/tests/protocol_fuzz.zig and tui/internal/protocol/fuzz_test.go
-- [ ] T063 [P] Add terminal failure and cancellation tests proving restoration and no mutation after timeout in tui/internal/ui/terminal_test.go and tests/integration/core_timeout_test.go
-- [ ] T064 Verify native atomic replacement, file/directory sync, lock behavior, and snapshot exclusive-create on macOS and Linux in tests/integration/platform_persistence_test.go
-- [ ] T065 Document installation, store layout, CLI commands, key bindings, local unauthenticated actor semantics, and recovery in README.md
-- [ ] T066 Execute every scenario in specs/001-intent-review-skeleton/quickstart.md and record deviations in specs/001-intent-review-skeleton/validation-results.md
-- [ ] T067 Re-run Constitution gates, verify both skill contracts and every machine-readable contract, and record any approved exceptions in specs/001-intent-review-skeleton/validation-results.md
-- [ ] T068 Run the primary Draft-to-snapshot journey with 10 representative first-time reviewers, record completion without external assistance, and verify at least 9 succeed in specs/001-intent-review-skeleton/usability-results.md
+- [X] T061 [P] Add generated 1,000-record and 10 MiB Intent fixtures plus timing assertions in tests/fixtures/large/ and tests/integration/performance_test.go
+- [X] T062 [P] Add protocol fuzz/property tests for malformed lengths, UTF-8, duplicate names, unknown fields, and extra stdout in core/tests/protocol_fuzz.zig and tui/internal/protocol/fuzz_test.go
+- [X] T063 [P] Add terminal failure and cancellation tests proving restoration and no mutation after timeout in tui/internal/ui/terminal_test.go and tests/integration/core_timeout_test.go
+- [X] T064 Verify native atomic replacement, file/directory sync, lock behavior, and snapshot exclusive-create on macOS and Linux in tests/integration/platform_persistence_test.go
+- [X] T065 Document installation, store layout, CLI commands, key bindings, local unauthenticated actor semantics, and recovery in README.md
+- [X] T066 Execute every scenario in specs/001-intent-review-skeleton/quickstart.md and record deviations in specs/001-intent-review-skeleton/validation-results.md
+- [X] T067 Re-run Constitution gates, verify both skill contracts and every machine-readable contract, and record any approved exceptions in specs/001-intent-review-skeleton/validation-results.md
+- [X] T068 Run the primary Draft-to-snapshot journey with 10 representative first-time reviewers, record completion without external assistance, and verify at least 9 succeed in specs/001-intent-review-skeleton/usability-results.md
 
 **Checkpoint**: The feature satisfies supported-platform, performance, protocol, safety, skill, and
 documentation gates.

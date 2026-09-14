@@ -55,6 +55,19 @@ func renderView(m Model) tea.View {
 		b.WriteString(m.Status)
 		b.WriteByte('\n')
 	}
-	b.WriteString("\n↑/↓ j/k navigate  a accept  e edit  c comment  x reject  q quit\n")
+	if m.ResumeNotice != "" {
+		b.WriteString("\n")
+		b.WriteString(m.ResumeNotice)
+		b.WriteByte('\n')
+	}
+	if blockers := m.ResumeBlockers(); len(blockers) > 0 {
+		b.WriteString("\nblockers:\n")
+		for _, blocker := range blockers {
+			b.WriteString("- ")
+			b.WriteString(blocker)
+			b.WriteByte('\n')
+		}
+	}
+	b.WriteString("\n↑/↓ j/k navigate  a accept  e edit  c comment  x reject  f complete  p approve  q quit\n")
 	return tea.NewView(b.String())
 }

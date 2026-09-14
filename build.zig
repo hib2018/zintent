@@ -75,4 +75,21 @@ pub fn build(b: *std.Build) void {
         }),
     });
     test_step.dependOn(&b.addRunArtifact(approval_tests).step);
+    const diff_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("core/src/diff.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    test_step.dependOn(&b.addRunArtifact(diff_tests).step);
+    const recovery_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("core/tests/recovery.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "zintent_core", .module = core }},
+        }),
+    });
+    test_step.dependOn(&b.addRunArtifact(recovery_tests).step);
 }

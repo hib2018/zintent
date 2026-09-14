@@ -22,6 +22,7 @@ pub fn validateItems(items: []const model.Item, comments: []const model.Comment)
 pub fn approvalEligible(items: []const model.Item, comments: []const model.Comment) bool {
     var included: usize = 0;
     for (items) |item| {
+        if (!item.included_in_approval) continue;
         if (item.review_status == .rejected) continue;
         included += 1;
         if (item.review_status == .unreviewed) return false;
@@ -48,14 +49,26 @@ pub fn completeReview(items: []const model.Item, comments: []const model.Comment
 /// protocol boundary; this function enforces the invariants needed by the
 /// read-only core operations.
 pub fn validateIntent(value: std.json.Value) !void {
-    const object = switch (value) { .object => |item| item, else => return error.InvalidIntent };
+    const object = switch (value) {
+        .object => |item| item,
+        else => return error.InvalidIntent,
+    };
     const payload = object.get("revision_payload") orelse value;
-    const payload_object = switch (payload) { .object => |item| item, else => return error.InvalidIntent };
+    const payload_object = switch (payload) {
+        .object => |item| item,
+        else => return error.InvalidIntent,
+    };
     const items_value = payload_object.get("items") orelse return error.InvalidIntent;
-    const items_array = switch (items_value) { .array => |item| item, else => return error.InvalidIntent };
+    const items_array = switch (items_value) {
+        .array => |item| item,
+        else => return error.InvalidIntent,
+    };
     if (items_array.items.len == 0) return error.InvalidIntent;
     for (items_array.items) |item| {
-        const item_object = switch (item) { .object => |entry| entry, else => return error.InvalidIntent };
+        const item_object = switch (item) {
+            .object => |entry| entry,
+            else => return error.InvalidIntent,
+        };
         const statement = item_object.get("statement") orelse return error.InvalidIntent;
         if (statement != .string or statement.string.len == 0) return error.InvalidIntent;
     }
@@ -77,13 +90,11 @@ pub fn parseRevision(allocator: std.mem.Allocator, bytes: []const u8) !std.json.
 
 test "intent structural validation accepts a revision payload and rejects empty items" {
     const allocator = std.testing.allocator;
-    var parsed = try std.json.parseFromSlice(std.json.Value, allocator,
-        "{\"revision_payload\":{\"items\":[{\"statement\":\"goal\"}]}}", .{});
+    var parsed = try std.json.parseFromSlice(std.json.Value, allocator, "{\"revision_payload\":{\"items\":[{\"statement\":\"goal\"}]}}", .{});
     defer parsed.deinit();
     try validateIntent(parsed.value);
 
-    var invalid = try std.json.parseFromSlice(std.json.Value, allocator,
-        "{\"revision_payload\":{\"items\":[{\"statement\":\"\"}]}}", .{});
+    var invalid = try std.json.parseFromSlice(std.json.Value, allocator, "{\"revision_payload\":{\"items\":[{\"statement\":\"\"}]}}", .{});
     defer invalid.deinit();
     try std.testing.expectError(error.InvalidIntent, validateIntent(invalid.value));
 }

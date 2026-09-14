@@ -65,6 +65,29 @@ test "HEAD publication failure leaves the previous revision reachable" {
     try std.testing.expectEqualStrings("new revision", orphan_bytes);
 }
 
+test "verified HEAD reopening loads only the selected revision" {
+    const allocator = std.testing.allocator;
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const base = try std.fmt.allocPrint(allocator, ".zig-cache/tmp/{s}/verified", .{&tmp.sub_path});
+    defer allocator.free(base);
+    const revision_path = try std.fs.path.join(allocator, &.{ base, "revisions", "revision-1.json" });
+    defer allocator.free(revision_path);
+    const head_path = try std.fs.path.join(allocator, &.{ base, "HEAD.json" });
+    defer allocator.free(head_path);
+    const revision_bytes = "{\"revision_id\":\"revision-1\"}";
+    const digest = core.hashing.sha256Hex(revision_bytes);
+    var head_output: std.Io.Writer.Allocating = .init(allocator);
+    defer head_output.deinit();
+    try std.json.Stringify.value(core.store.newHead("intent-1", "revision-1", &digest, "in_review"), .{}, &head_output.writer);
+    try core.store.publishRevisionAndHead(allocator, io, revision_path, revision_bytes, head_path, head_output.written());
+    const loaded = try core.store.loadVerifiedRevision(allocator, io, base);
+    defer allocator.free(loaded.bytes);
+    try std.testing.expectEqualStrings(revision_bytes, loaded.bytes);
+    try std.testing.expectEqualStrings("revision-1", loaded.head.current_revision_id);
+}
+
 fn readFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8) ![]u8 {
     var file = try std.Io.Dir.cwd().openFile(io, path, .{});
     defer file.close(io);

@@ -91,6 +91,9 @@ pub const Command = struct {
     confirmation_token: ?[]const u8 = null,
     challenge_response: ?[]const u8 = null,
     interactive_tty: ?bool = null,
+    from_revision_id: ?[]const u8 = null,
+    to_revision_id: ?[]const u8 = null,
+    resolution_revision_id: ?[]const u8 = null,
 
     pub fn validate(self: Command) !void {
         if (model.isMutation(self.operation)) {

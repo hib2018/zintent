@@ -24,9 +24,38 @@ type Model struct {
 		Execute(operation, itemID string, extra map[string]any) tea.Cmd
 	}
 	IntentPath, ExpectedRevision string
+	ResumeNotice                 string
 }
 
 func New(items []Item) Model { return Model{Items: items, Lifecycle: "draft"} }
+
+// ResumeBlockers reports the actionable work still preventing completion.
+func (m Model) ResumeBlockers() []string {
+	blockers := make([]string, 0)
+	for _, item := range m.Items {
+		if item.Status == "unreviewed" || item.Status == "" {
+			blockers = append(blockers, "unreviewed item: "+item.ID)
+		}
+	}
+	if m.Lifecycle == "review_complete" && len(blockers) == 0 {
+		return blockers
+	}
+	return blockers
+}
+
+// Restore selects the same stable item ID after a process restart.
+func (m Model) Restore(revision, lifecycle, selectedID string, items []Item) Model {
+	m.Revision, m.Lifecycle, m.Items = revision, lifecycle, items
+	m.Selected = 0
+	for i, item := range items {
+		if item.ID == selectedID {
+			m.Selected = i
+			break
+		}
+	}
+	m.ResumeNotice = "resumed from canonical artifact " + revision
+	return m
+}
 
 func (m Model) Init() tea.Cmd { return nil }
 
@@ -50,6 +79,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.PendingAction = map[string]string{"a": "accept", "e": "edit-preview", "c": "comment", "x": "reject"}[msg.String()]
 				m.Modal = m.PendingAction
 			}
+		case "f":
+			if m.Executor != nil {
+				m.Status = "completing review"
+				return m, m.Executor.Execute("complete_review", "", nil)
+			}
+		case "p":
+			m.Status = "approval is available through the governed approval skill"
 		case "enter":
 			if m.Modal != "" {
 				itemID := m.Items[m.Selected].ID

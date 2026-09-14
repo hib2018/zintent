@@ -111,3 +111,12 @@ test "JCS normalizes representable numbers" {
     defer allocator.free(result);
     try std.testing.expectEqualStrings("{\"fraction\":1,\"negativeZero\":0}", result);
 }
+
+test "approved content projection hash is stable" {
+    const allocator = std.testing.allocator;
+    var parsed = try std.json.parseFromSlice(std.json.Value, allocator, "{\"intent_id\":\"i\",\"items\":[{\"item_id\":\"x\",\"kind\":\"goal\",\"provenance\":{\"content_origin\":\"human\"},\"statement\":\"Ship\"}],\"schema_version\":\"1.0.0\",\"source_references\":[]}", .{});
+    defer parsed.deinit();
+    const canonical = try canonicalize(allocator, parsed.value);
+    defer allocator.free(canonical);
+    try std.testing.expectEqualStrings("3523215b80d6bdc899ab38b939e248e76c50ff1c8a9fd84828ddd9e5887b6ed9", &sha256Hex(canonical));
+}
