@@ -1,6 +1,7 @@
-.PHONY: fmt check test build package
+.PHONY: fmt check test build package install
 
 DIST_DIR ?= zig-out/package
+PREFIX ?= $(HOME)/.local
 
 fmt:
 	zig fmt build.zig core
@@ -20,3 +21,6 @@ build:
 
 package: build
 	./scripts/package.sh "$(DIST_DIR)"
+
+install: package
+	./scripts/install.sh --prefix "$(PREFIX)" --stage "$(DIST_DIR)" $(if $(filter 1,$(FORCE)),--force,)

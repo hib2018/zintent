@@ -26,6 +26,24 @@ PREFIX/
 `make package DIST_DIR=/path/to/stage` で指定できます。このtargetはstagingのみを行い、
 `~/.local` などへのインストールは行いません。
 
+ローカルユーザー向けの標準インストール先は `~/.local` です。
+
+```sh
+make install
+```
+
+別のprefixへ配置する場合は `make install PREFIX=/absolute/path` を使います。既存の異なる
+ファイルは自動的に上書きされません。zintentの更新として置き換える場合だけ、内容を確認した
+上で `make install FORCE=1` を実行してください。配置内容だけ確認する場合は次を使います。
+
+```sh
+make package
+./scripts/install.sh --prefix "$HOME/.local" --dry-run
+```
+
+インストーラはzintentの2バイナリだけを対象とし、PATHやshell設定、Project Artifactには
+変更を加えません。`~/.local/bin` がPATHに含まれていない場合の設定も利用者側で行います。
+
 frontendはcoreを次の順で探索します。
 
 1. `--core` オプション（指定された場合）
