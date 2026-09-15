@@ -381,13 +381,24 @@ func localActor(fallback string) (map[string]any, error) {
 }
 
 func findCore() string {
-	if value := os.Getenv("ZINTENT_CORE"); value != "" {
-		return value
+	executable, _ := os.Executable()
+	return findCoreFor(os.Getenv("ZINTENT_CORE"), executable)
+}
+
+func findCoreFor(explicit, executable string) string {
+	if explicit != "" {
+		return explicit
 	}
-	if exe, err := os.Executable(); err == nil {
-		candidate := filepath.Join(filepath.Dir(exe), "zintent-core")
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
+	if executable != "" {
+		dir := filepath.Dir(executable)
+		candidates := []string{
+			filepath.Join(dir, "zintent-core"),
+			filepath.Clean(filepath.Join(dir, "..", "libexec", "zintent", "zintent-core")),
+		}
+		for _, candidate := range candidates {
+			if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() && info.Mode()&0o111 != 0 {
+				return candidate
+			}
 		}
 	}
 	return "../zig-out/bin/zintent-core"

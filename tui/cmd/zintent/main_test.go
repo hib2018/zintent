@@ -89,3 +89,49 @@ func TestWorkspaceCommandAndNonTTYRefusal(t *testing.T) {
 		t.Fatalf("expected TTY refusal, got %v", err)
 	}
 }
+
+func TestFindCoreForPrefersExplicitOverride(t *testing.T) {
+	if got := findCoreFor("/custom/zintent-core", "/prefix/bin/zintent"); got != "/custom/zintent-core" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestFindCoreForPrefersSiblingBinary(t *testing.T) {
+	prefix := t.TempDir()
+	frontend := filepath.Join(prefix, "bin", "zintent")
+	sibling := filepath.Join(prefix, "bin", "zintent-core")
+	libexec := filepath.Join(prefix, "libexec", "zintent", "zintent-core")
+	writeExecutable(t, sibling)
+	writeExecutable(t, libexec)
+
+	if got := findCoreFor("", frontend); got != sibling {
+		t.Fatalf("got %q, want sibling %q", got, sibling)
+	}
+}
+
+func TestFindCoreForUsesLibexecLayout(t *testing.T) {
+	prefix := t.TempDir()
+	frontend := filepath.Join(prefix, "bin", "zintent")
+	libexec := filepath.Join(prefix, "libexec", "zintent", "zintent-core")
+	writeExecutable(t, libexec)
+
+	if got := findCoreFor("", frontend); got != libexec {
+		t.Fatalf("got %q, want libexec %q", got, libexec)
+	}
+}
+
+func TestFindCoreForFallsBackForDevelopment(t *testing.T) {
+	if got := findCoreFor("", filepath.Join(t.TempDir(), "bin", "zintent")); got != "../zig-out/bin/zintent-core" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func writeExecutable(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("test"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}

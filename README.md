@@ -12,6 +12,28 @@ zig build test
 (cd tui && go test ./... && go build -o ../zig-out/bin/zintent ./cmd/zintent)
 ```
 
+## 配布レイアウト
+
+グローバル配置では、利用者が直接呼ぶfrontendと内部coreを分離します。
+
+```text
+PREFIX/
+├── bin/zintent
+└── libexec/zintent/zintent-core
+```
+
+`make package` はこの構造を `zig-out/package/` に作成します。別のstaging先は
+`make package DIST_DIR=/path/to/stage` で指定できます。このtargetはstagingのみを行い、
+`~/.local` などへのインストールは行いません。
+
+frontendはcoreを次の順で探索します。
+
+1. `--core` オプション（指定された場合）
+2. `ZINTENT_CORE` 環境変数
+3. frontendと同じディレクトリの `zintent-core`（従来互換）
+4. `../libexec/zintent/zintent-core`（上記の配布レイアウト）
+5. 開発用の `../zig-out/bin/zintent-core`
+
 ## CLI
 
 ```sh

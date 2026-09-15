@@ -1,4 +1,6 @@
-.PHONY: fmt check test build
+.PHONY: fmt check test build package
+
+DIST_DIR ?= zig-out/package
 
 fmt:
 	zig fmt build.zig core
@@ -15,3 +17,6 @@ test:
 build:
 	zig build
 	cd tui && /usr/local/go/bin/go build -o ../zig-out/bin/zintent ./cmd/zintent
+
+package: build
+	./scripts/package.sh "$(DIST_DIR)"
