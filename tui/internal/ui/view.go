@@ -10,14 +10,7 @@ func renderView(m Model) tea.View {
 	if m.Quitting {
 		return tea.NewView("Review closed.\n")
 	}
-	var b strings.Builder
-	b.WriteString("zintent  ")
-	b.WriteString(m.Lifecycle)
-	b.WriteString("  rev:")
-	b.WriteString(m.Revision)
-	b.WriteString("  actor:")
-	b.WriteString(m.Actor)
-	b.WriteString("\n\n")
+	var list, detail strings.Builder
 
 	start, end := 0, len(m.Items)
 	if m.Height > 8 && len(m.Items) > m.Height-8 {
@@ -28,37 +21,37 @@ func renderView(m Model) tea.View {
 	for i := start; i < end; i++ {
 		item := m.Items[i]
 		if i == m.Selected {
-			b.WriteString("> ")
+			list.WriteString("→ ")
 		} else {
-			b.WriteString("  ")
+			list.WriteString("  ")
 		}
-		b.WriteString(item.ID)
-		b.WriteString(" [")
-		b.WriteString(item.Status)
-		b.WriteString("] ")
-		b.WriteString(item.Statement)
-		b.WriteByte('\n')
+		list.WriteString(item.ID + " [" + item.Status + "] " + item.Statement + "\n")
 	}
 
 	if len(m.Items) > 0 {
 		selected := m.Items[m.Selected]
-		b.WriteString("\n--- detail ---\n")
-		b.WriteString(selected.ID)
-		b.WriteString(" / ")
-		b.WriteString(selected.Kind)
-		b.WriteString("\n")
-		b.WriteString(selected.Statement)
-		b.WriteByte('\n')
+		detail.WriteString(selected.ID + " / " + selected.Kind + "\n\n" + selected.Statement + "\n")
 		if selected.Provenance != "" {
-			b.WriteString("provenance: ")
-			b.WriteString(selected.Provenance)
-			b.WriteByte('\n')
+			detail.WriteString("provenance: " + selected.Provenance + "\n")
 		}
 		if selected.Rationale != "" {
-			b.WriteString("rationale: ")
-			b.WriteString(selected.Rationale)
-			b.WriteByte('\n')
+			detail.WriteString("rationale: " + selected.Rationale + "\n")
 		}
+	}
+	width := max(40, m.Width)
+	height := max(12, m.Height-7)
+	var b strings.Builder
+	header := "zintent  " + m.Lifecycle + "  rev:" + m.Revision + "  actor:" + m.Actor
+	b.WriteString(strings.Join(renderPane("Review", header, width, 3, false), "\n"))
+	b.WriteByte('\n')
+	if width < 72 {
+		b.WriteString(strings.Join(renderPane("Items", list.String(), width, max(6, height/2), true), "\n"))
+		b.WriteByte('\n')
+		b.WriteString(strings.Join(renderPane("Item Detail", detail.String(), width, max(6, height/2), false), "\n"))
+	} else {
+		left := max(28, width*2/5)
+		right := width - left - 1
+		b.WriteString(joinPanes(renderPane("Items", list.String(), left, height, true), renderPane("Item Detail", detail.String(), right, height, false)))
 	}
 	if m.Modal != "" && len(m.Items) > 0 {
 		b.WriteString("\nConfirm ")

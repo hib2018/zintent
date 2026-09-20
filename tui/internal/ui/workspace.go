@@ -283,20 +283,39 @@ func (m WorkspaceModel) View() tea.View {
 	if width < 40 {
 		width = 40
 	}
+	height := m.Height
+	if height < 18 {
+		height = 24
+	}
+	header := fmt.Sprintf("zintent workspace  %s  intent:%s  rev:%s", m.Screen(), fallback(m.IntentID, "-"), fallback(m.Revision, "-"))
+	navigation := m.navigationBody()
+	main := m.screenBody()
+	bodyHeight := max(8, height-9)
+	var body string
+	if width < 72 {
+		body = strings.Join(renderPane("Navigation", navigation, width, 7, false), "\n") + "\n" +
+			strings.Join(renderPane(m.Screen().String(), main, width, bodyHeight, true), "\n")
+	} else {
+		left := max(24, width/4)
+		right := width - left - 1
+		body = joinPanes(renderPane("Navigation", navigation, left, bodyHeight, false), renderPane(m.Screen().String(), main, right, bodyHeight, true))
+	}
+	status := fallback(m.Status, "Ready")
 	var b strings.Builder
-	fmt.Fprintf(&b, "zintent workspace  %s  intent:%s  rev:%s\n", m.Screen(), fallback(m.IntentID, "-"), fallback(m.Revision, "-"))
-	b.WriteString(strings.Repeat("─", min(width, 100)))
+	b.WriteString(strings.Join(renderPane("Workspace", header, width, 3, false), "\n"))
 	b.WriteByte('\n')
-	fmt.Fprintf(&b, "\n%s\n", m.screenBody())
-	if m.Status != "" {
-		fmt.Fprintf(&b, "\n%s\n", m.Status)
-	}
+	b.WriteString(body)
 	if m.Import.Phase != ModalClosed {
-		fmt.Fprintf(&b, "\nImport Draft\nSource: %s\nHash: %s\nDestination: %s\n", m.Import.SourcePath, m.Import.SourceHash, m.Import.Destination)
+		var modal strings.Builder
+		fmt.Fprintf(&modal, "Source: %s\nHash: %s\nDestination: %s\n", m.Import.SourcePath, m.Import.SourceHash, m.Import.Destination)
 		for _, finding := range m.Import.Findings {
-			fmt.Fprintf(&b, "BLOCKING: %s\n", finding)
+			fmt.Fprintf(&modal, "BLOCKING: %s\n", finding)
 		}
+		b.WriteByte('\n')
+		b.WriteString(strings.Join(renderPane("Import Draft", modal.String(), width, 7, true), "\n"))
 	}
+	b.WriteByte('\n')
+	b.WriteString(strings.Join(renderPane("Status", status, width, 3, false), "\n"))
 	b.WriteString("\nenter open  esc back  r review  c comments  f complete  p approve  h history  v validate  q quit\n")
 	v := tea.NewView(b.String())
 	v.AltScreen = true
@@ -304,6 +323,26 @@ func (m WorkspaceModel) View() tea.View {
 		v.Cursor = tea.NewCursor(0, 0)
 	}
 	return v
+}
+
+func (m WorkspaceModel) navigationBody() string {
+	labels := []struct {
+		screen Screen
+		key    string
+	}{
+		{ScreenIntentList, "•"}, {ScreenDashboard, "d"}, {ScreenReview, "r"},
+		{ScreenComments, "c"}, {ScreenCompletion, "f"}, {ScreenApproval, "p"},
+		{ScreenHistory, "h"}, {ScreenValidation, "v"}, {ScreenSnapshot, "s"}, {ScreenRecovery, "R"},
+	}
+	var lines []string
+	for _, item := range labels {
+		marker := "  "
+		if item.screen == m.Screen() {
+			marker = "→ "
+		}
+		lines = append(lines, fmt.Sprintf("%s%s  %s", marker, item.key, item.screen))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (m WorkspaceModel) screenBody() string {
