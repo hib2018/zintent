@@ -71,7 +71,7 @@ zintent workspace WORKSPACE_DIR
 
 `zintent workspace WORKSPACE_DIR` は、指定ディレクトリの直下にある複数のIntentを一覧・検索し、レビュー、承認、監査、復旧までを一つのalternate-screen TUIで扱います。サブディレクトリの再帰探索やsymlink追跡は行いません。破損したIntentはfindingとして表示され、開くことはできません。
 
-Intent一覧では `/` で検索、`n` で既存Draft JSONの取込、`Enter` で選択Intentをcanonical stateから開きます。取込はsource hash、coreが提案したID・保存先、findingを確認してから確定します。元Draftは変更されず、失敗時に部分的なIntentは公開されません。
+Intent一覧では `/` で検索、`n` で既存Draft JSONの取込、`Enter` で選択Intentをcanonical stateから開きます。Draftの探索範囲はworkspaceの兄弟にある`draft/`です。たとえばworkspaceが`project/intents/`なら`project/draft/`以下のJSONが一覧になり、`j/k`または矢印で選択できます。取込はsource hash、coreが提案したID・保存先、findingを確認してから確定します。元Draftは変更されず、失敗時に部分的なIntentは公開されません。
 
 画面は `Intent list → Dashboard → Review / Comments / Completion / Approval / History / Validation / Snapshot / Recovery` の構成です。共通キーは `Esc` 戻る、`q` 終了、`r/c/f/p/h/v/s/R` が各画面への移動です。入力中は`Esc`で取消し、確定操作は`Enter`で行います。Approvalはfresh challengeの完全一致を必要とし、Recoveryは観測後に変化していない一時ファイルだけを削除します。
 

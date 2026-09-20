@@ -75,8 +75,13 @@ func TestWorkspaceCursorOnlyWhileEditing(t *testing.T) {
 	if m.View().Cursor != nil {
 		t.Fatal("cursor must be hidden outside input")
 	}
-	m.Modal = ModalEditing
+	m.IntentList.FilterEditing = true
 	if m.View().Cursor == nil {
-		t.Fatal("editing must show cursor")
+		t.Fatal("text filtering must show cursor")
+	}
+	m.IntentList.FilterEditing = false
+	m.Modal = ModalEditing
+	if m.View().Cursor != nil {
+		t.Fatal("Draft selection is keyboard navigation, not text input")
 	}
 }

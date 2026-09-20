@@ -40,9 +40,11 @@ type WorkspaceModel struct {
 	Recovery                   RecoveryScreen
 	IntentList                 IntentListScreen
 	Import                     ImportModal
+	Drafts                     DraftPicker
 	WorkspacePath              string
 	WorkspaceExecutor          interface {
 		List() tea.Cmd
+		ListDrafts() tea.Cmd
 		InspectDraft(string) tea.Cmd
 		ImportDraft(ImportModal) tea.Cmd
 		OpenIntent(string) tea.Cmd
@@ -99,18 +101,15 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "esc":
 				m.Import.Clear()
 				m.Modal = ModalClosed
-			case "backspace":
-				if len(m.Import.SourcePath) > 0 {
-					m.Import.SourcePath = m.Import.SourcePath[:len(m.Import.SourcePath)-1]
-				}
+			case "j", "down":
+				m.Drafts.Move(1)
+			case "k", "up":
+				m.Drafts.Move(-1)
 			case "enter":
-				if m.Import.SourcePath != "" && m.WorkspaceExecutor != nil {
+				if m.Drafts.SelectedPath != "" && m.WorkspaceExecutor != nil {
+					m.Import.SourcePath = m.Drafts.SelectedPath
 					m.Import.Phase = ModalPreviewLoading
 					return m, m.WorkspaceExecutor.InspectDraft(m.Import.SourcePath)
-				}
-			default:
-				if msg.Text != "" {
-					m.Import.SourcePath += msg.Text
 				}
 			}
 			return m, nil
@@ -145,8 +144,10 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "n":
 			if m.Screen() == ScreenIntentList {
-				m.Import = ImportModal{Phase: ModalEditing}
-				m.Modal = ModalEditing
+				m.Status = "loading Draft files"
+				if m.WorkspaceExecutor != nil {
+					return m, m.WorkspaceExecutor.ListDrafts()
+				}
 			}
 		case "enter":
 			if m.Screen() == ScreenIntentList {
@@ -214,6 +215,17 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.IntentList = m.IntentList.Reload(msg.Entries)
 			m.Status = "workspace reloaded"
+		}
+	case DraftListMsg:
+		if msg.Err != nil {
+			m.Status = "Draft directory unavailable: " + msg.Err.Error()
+			m.Modal = ModalError
+		} else {
+			m.Drafts.Root = msg.Root
+			m.Drafts = m.Drafts.Reload(msg.Entries)
+			m.Import = ImportModal{Phase: ModalEditing}
+			m.Modal = ModalEditing
+			m.Status = fmt.Sprintf("%d Draft files found", len(msg.Entries))
 		}
 	case DraftPreviewMsg:
 		if msg.Err != nil {
@@ -307,19 +319,28 @@ func (m WorkspaceModel) View() tea.View {
 	b.WriteString(body)
 	if m.Import.Phase != ModalClosed {
 		var modal strings.Builder
-		fmt.Fprintf(&modal, "Source: %s\nHash: %s\nDestination: %s\n", m.Import.SourcePath, m.Import.SourceHash, m.Import.Destination)
+		if m.Import.Phase == ModalEditing {
+			modal.WriteString(m.Drafts.View())
+			modal.WriteString("\n↑/↓ j/k select  enter inspect  esc cancel\n")
+		} else {
+			fmt.Fprintf(&modal, "Source: %s\nHash: %s\nDestination: %s\n", m.Import.SourcePath, m.Import.SourceHash, m.Import.Destination)
+		}
 		for _, finding := range m.Import.Findings {
 			fmt.Fprintf(&modal, "BLOCKING: %s\n", finding)
 		}
 		b.WriteByte('\n')
-		b.WriteString(strings.Join(renderPane("Import Draft", modal.String(), width, 7, true), "\n"))
+		modalHeight := 7
+		if m.Import.Phase == ModalEditing {
+			modalHeight = 15
+		}
+		b.WriteString(strings.Join(renderPane("Import Draft", modal.String(), width, modalHeight, true), "\n"))
 	}
 	b.WriteByte('\n')
 	b.WriteString(strings.Join(renderPane("Status", status, width, 3, false), "\n"))
 	b.WriteString("\nenter open  esc back  r review  c comments  f complete  p approve  h history  v validate  q quit\n")
 	v := tea.NewView(b.String())
 	v.AltScreen = true
-	if m.Modal == ModalEditing {
+	if m.IntentList.FilterEditing {
 		v.Cursor = tea.NewCursor(0, 0)
 	}
 	return v

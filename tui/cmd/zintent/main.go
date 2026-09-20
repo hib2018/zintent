@@ -71,9 +71,14 @@ func runWorkspace(parsed options) error {
 		return err
 	}
 	workspacePath, _ := parsed.payload["workspace_path"].(string)
+	workspacePath, err = filepath.Abs(workspacePath)
+	if err != nil {
+		return fmt.Errorf("resolve workspace path: %w", err)
+	}
+	draftRoot := filepath.Join(filepath.Dir(filepath.Clean(workspacePath)), "draft")
 	model := ui.NewWorkspace()
 	model.WorkspacePath = workspacePath
-	model.WorkspaceExecutor = ui.WorkspaceCoreCommands{Core: runner.Core{Executable: parsed.corePath}, WorkspacePath: workspacePath, Actor: actor}
+	model.WorkspaceExecutor = ui.WorkspaceCoreCommands{Core: runner.Core{Executable: parsed.corePath}, WorkspacePath: workspacePath, DraftRoot: draftRoot, Actor: actor}
 	_, err = tea.NewProgram(model, tea.WithInput(os.Stdin), tea.WithOutput(os.Stdout)).Run()
 	return err
 }

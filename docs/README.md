@@ -72,6 +72,6 @@ in_review（snapshotは不変）
 ./zig-out/bin/zintent workspace /path/to/workspace
 ```
 
-ワークスペース直下の各Intent directoryだけが候補です。一覧で`n`を押すとDraft source pathを入力でき、検証結果、source hash、提案保存先を確認後にatomic importします。`Enter`でIntentを開くと常にZig coreからcanonical revisionを再取得し、前回選択がなければ最初の未レビューitemへ復帰します。
+ワークスペース直下の各Intent directoryだけが候補です。一覧で`n`を押すと、workspaceと同じ階層の`draft/`以下にあるJSONが選択候補として表示されます。`j/k`または矢印でDraftを選び、検証結果、source hash、提案保存先を確認後にatomic importします。symlink、JSON以外のファイル、`draft/`外のパスは候補になりません。`Enter`でIntentを開くと常にZig coreからcanonical revisionを再取得し、前回選択がなければ最初の未レビューitemへ復帰します。
 
 Dashboardから`r` Review、`c` Comments、`f` Completion、`p` Approval、`h` History、`v` Validation、`s` Snapshot、`R` Recoveryへ移動します。監査表示は到達可能revisionとorphanを分離し、復旧は明示選択した変更のない一時ファイルだけを対象にします。core timeout/crashやstale revision時は操作を自動再実行せず、canonical reloadを要求します。

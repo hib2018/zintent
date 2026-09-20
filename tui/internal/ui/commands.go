@@ -5,7 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -39,6 +43,11 @@ type ReloadResultMsg struct {
 
 type WorkspaceListMsg struct {
 	Entries []IntentEntry
+	Err     error
+}
+type DraftListMsg struct {
+	Root    string
+	Entries []DraftEntry
 	Err     error
 }
 type DraftPreviewMsg struct {
@@ -98,7 +107,55 @@ func (c WorkspaceCoreCommands) OpenIntent(intentPath string) tea.Cmd {
 type WorkspaceCoreCommands struct {
 	Core          runner.Core
 	WorkspacePath string
+	DraftRoot     string
 	Actor         map[string]any
+}
+
+func (c WorkspaceCoreCommands) ListDrafts() tea.Cmd {
+	return func() tea.Msg {
+		root, err := filepath.Abs(c.DraftRoot)
+		if err != nil {
+			return DraftListMsg{Root: c.DraftRoot, Err: err}
+		}
+		entries := make([]DraftEntry, 0)
+		err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if path == root {
+				return nil
+			}
+			if entry.Type()&os.ModeSymlink != 0 {
+				if entry.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if entry.IsDir() {
+				if strings.HasPrefix(entry.Name(), ".") {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if !strings.EqualFold(filepath.Ext(entry.Name()), ".json") {
+				return nil
+			}
+			relative, relErr := filepath.Rel(root, path)
+			if relErr != nil || strings.HasPrefix(relative, "..") {
+				return nil
+			}
+			entries = append(entries, DraftEntry{Name: filepath.ToSlash(relative), Path: path})
+			if len(entries) >= 1000 {
+				return filepath.SkipAll
+			}
+			return nil
+		})
+		if err != nil {
+			return DraftListMsg{Root: root, Err: err}
+		}
+		sort.SliceStable(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
+		return DraftListMsg{Root: root, Entries: entries}
+	}
 }
 
 func (c WorkspaceCoreCommands) run(operation string, payload map[string]any) (protocol.Response, error) {

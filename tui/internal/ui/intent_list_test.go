@@ -2,6 +2,7 @@ package ui
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 type resumeExecutor struct{}
 
 func (resumeExecutor) List() tea.Cmd                   { return nil }
+func (resumeExecutor) ListDrafts() tea.Cmd             { return nil }
 func (resumeExecutor) InspectDraft(string) tea.Cmd     { return nil }
 func (resumeExecutor) ImportDraft(ImportModal) tea.Cmd { return nil }
 func (resumeExecutor) OpenIntent(string) tea.Cmd {
@@ -61,6 +63,52 @@ func TestImportModalConfirmationExpiryAndFailureReset(t *testing.T) {
 	m.ResetFailure("failed")
 	if m.Token != "" || m.Phase != ModalError {
 		t.Fatal()
+	}
+}
+
+func TestDraftPickerListsSiblingDraftJSONAndSelectsWithKeys(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "nested"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"b.json", "nested/a.json", "ignore.txt"} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte("{}"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	outside := filepath.Join(t.TempDir(), "outside.json")
+	if err := os.WriteFile(outside, []byte("{}"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "linked.json")); err != nil {
+		t.Fatal(err)
+	}
+	msg := (WorkspaceCoreCommands{DraftRoot: root}).ListDrafts()().(DraftListMsg)
+	if msg.Err != nil || len(msg.Entries) != 2 {
+		t.Fatalf("entries=%v err=%v", msg.Entries, msg.Err)
+	}
+	if msg.Entries[0].Name != "b.json" || msg.Entries[1].Name != "nested/a.json" {
+		t.Fatalf("order=%v", msg.Entries)
+	}
+	picker := (DraftPicker{Root: root}).Reload(msg.Entries)
+	picker.Move(1)
+	if picker.SelectedPath != msg.Entries[1].Path || !strings.Contains(picker.View(), "→ nested/a.json") {
+		t.Fatalf("picker=%+v\n%s", picker, picker.View())
+	}
+}
+
+func TestWorkspaceNOpensDraftPickerThenInspectsSelection(t *testing.T) {
+	m := NewWorkspace()
+	m.WorkspaceExecutor = resumeExecutor{}
+	next, cmd := m.Update(workspaceKey("n"))
+	m = next.(WorkspaceModel)
+	if cmd != nil {
+		t.Fatal("fake executor returns nil list command")
+	}
+	next, _ = m.Update(DraftListMsg{Root: "/project/draft", Entries: []DraftEntry{{Name: "one.json", Path: "/project/draft/one.json"}}})
+	m = next.(WorkspaceModel)
+	if m.Modal != ModalEditing || m.Drafts.SelectedPath == "" {
+		t.Fatalf("picker not opened: %+v", m)
 	}
 }
 func TestIntentListGolden(t *testing.T) {
