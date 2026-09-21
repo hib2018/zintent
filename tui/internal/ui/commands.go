@@ -90,6 +90,12 @@ func (c WorkspaceCoreCommands) OpenIntent(intentPath string) tea.Cmd {
 							Provenance json.RawMessage `json:"provenance"`
 							Rationale  string          `json:"rationale"`
 						} `json:"items"`
+						Comments []struct {
+							ID           string `json:"comment_id"`
+							TargetItemID string `json:"target_item_id"`
+							Body         string `json:"body"`
+							Status       string `json:"status"`
+						} `json:"comments"`
 					} `json:"revision_payload"`
 				} `json:"intent"`
 			} `json:"data"`
@@ -101,7 +107,11 @@ func (c WorkspaceCoreCommands) OpenIntent(intentPath string) tea.Cmd {
 		for _, item := range result.Data.Intent.RevisionPayload.Items {
 			items = append(items, Item{ID: item.ID, Kind: item.Kind, Statement: item.Statement, Status: item.Status, Provenance: provenanceText(item.Provenance), Rationale: item.Rationale})
 		}
-		return WorkspaceCanonicalMsg{IntentID: result.Data.Intent.IntentID, RevisionID: result.Data.Intent.RevisionID, Lifecycle: result.Data.Intent.Lifecycle, Items: items}
+		comments := make([]CommentRecord, 0, len(result.Data.Intent.RevisionPayload.Comments))
+		for _, comment := range result.Data.Intent.RevisionPayload.Comments {
+			comments = append(comments, CommentRecord{ID: comment.ID, TargetItemID: comment.TargetItemID, Body: comment.Body, Status: comment.Status})
+		}
+		return WorkspaceCanonicalMsg{IntentID: result.Data.Intent.IntentID, RevisionID: result.Data.Intent.RevisionID, Lifecycle: result.Data.Intent.Lifecycle, IntentPath: filepath.Join(c.WorkspacePath, intentPath), Items: items, Comments: comments}
 	}
 }
 
@@ -110,6 +120,12 @@ type WorkspaceCoreCommands struct {
 	WorkspacePath string
 	DraftRoot     string
 	Actor         map[string]any
+}
+
+// ReviewCommands returns the same mutation gateway used by the standalone
+// review TUI. Workspace review must not duplicate domain transitions.
+func (c WorkspaceCoreCommands) ReviewCommands(intentPath, expectedRevision string) *CoreCommands {
+	return &CoreCommands{Core: c.Core, IntentPath: intentPath, Expected: expectedRevision, Actor: c.Actor}
 }
 
 func (c WorkspaceCoreCommands) ListDrafts() tea.Cmd {

@@ -30,7 +30,9 @@ type WorkspaceModel struct {
 	ActiveRequestID            string
 	Quitting                   bool
 	Lifecycle                  string
+	IntentPath                 string
 	Review                     ReviewScreen
+	ReviewFlow                 Model
 	Comments                   CommentsScreen
 	Completion                 CompletionScreen
 	Approval                   ApprovalModel
@@ -53,6 +55,7 @@ type WorkspaceModel struct {
 
 type WorkspaceCanonicalMsg struct {
 	IntentID, RevisionID, Lifecycle, SelectedID string
+	IntentPath                                  string
 	Items                                       []Item
 	Comments                                    []CommentRecord
 	Err                                         error
@@ -91,6 +94,13 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			return m, nil
+		}
+		if m.Screen() == ScreenReview && m.IntentPath != "" && m.Import.Phase == ModalClosed {
+			if key == "esc" && m.ReviewFlow.Modal == "" {
+				m.nav.back()
+				return m, nil
+			}
+			return m.updateReview(msg)
 		}
 		if key == "ctrl+c" || key == "q" && m.Modal == ModalClosed {
 			m.Quitting = true
@@ -188,17 +198,35 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case tea.WindowSizeMsg:
 		m.Width, m.Height = msg.Width, msg.Height
+		m.ReviewFlow.Width, m.ReviewFlow.Height = msg.Width, msg.Height
+	case ActionResultMsg:
+		return m.updateReview(msg)
+	case ReloadResultMsg:
+		return m.updateReview(msg)
 	case WorkspaceCanonicalMsg:
 		if msg.Err != nil {
 			m.Status = "canonical reload failed: " + msg.Err.Error()
 			m.Modal = ModalError
 			break
 		}
-		m.IntentID, m.Revision, m.Lifecycle = msg.IntentID, msg.RevisionID, msg.Lifecycle
+		m.IntentID, m.Revision, m.Lifecycle, m.IntentPath = msg.IntentID, msg.RevisionID, msg.Lifecycle, msg.IntentPath
 		m.Review = m.Review.Reload(msg.Items)
 		if msg.SelectedID != "" {
 			m.Review.SelectedID = msg.SelectedID
 		}
+		flow := New(msg.Items)
+		flow.IntentID, flow.Revision, flow.ExpectedRevision = msg.IntentID, msg.RevisionID, msg.RevisionID
+		flow.Lifecycle, flow.IntentPath = msg.Lifecycle, msg.IntentPath
+		flow.Width, flow.Height = m.Width, m.Height
+		if factory, ok := m.WorkspaceExecutor.(interface {
+			ReviewCommands(string, string) *CoreCommands
+		}); ok {
+			flow.Executor = factory.ReviewCommands(msg.IntentPath, msg.RevisionID)
+		}
+		if msg.SelectedID != "" {
+			flow = flow.Restore(msg.RevisionID, msg.Lifecycle, msg.SelectedID, msg.Items)
+		}
+		m.ReviewFlow = flow
 		m.Comments = m.Comments.Reload(msg.Comments)
 		m.Completion.RevisionID = m.Revision
 		if m.Screen() == ScreenIntentList {
@@ -261,6 +289,28 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// updateReview delegates review input and asynchronous command results to the
+// same model used by `zintent review`, then mirrors canonical fields needed by
+// the surrounding workspace. Domain transitions remain owned by the core.
+func (m WorkspaceModel) updateReview(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.ReviewFlow.Update(msg)
+	flow, ok := next.(Model)
+	if !ok {
+		m.Status = "review model returned an unexpected state"
+		return m, nil
+	}
+	m.ReviewFlow = flow
+	m.Revision, m.Lifecycle = flow.Revision, flow.Lifecycle
+	m.Quitting = flow.Quitting
+	m.Status = flow.Status
+	m.Review = m.Review.Reload(flow.Items)
+	if len(flow.Items) > 0 && flow.Selected >= 0 && flow.Selected < len(flow.Items) {
+		m.Review.SelectedID = flow.Items[flow.Selected].ID
+	}
+	m.Completion.RevisionID = m.Revision
+	return m, cmd
 }
 
 // ReloadRecords preserves selection by stable ID. If it disappeared, the
@@ -386,6 +436,14 @@ func (m WorkspaceModel) screenBody() string {
 		return m.Recovery.View()
 	case ScreenIntentList:
 		return m.intentDetail()
+	case ScreenReview:
+		if m.IntentPath == "" {
+			return "Review\nNo Intent selected."
+		}
+		flow := m.ReviewFlow
+		flow.Width = max(40, m.Width-max(24, m.Width/4)-3)
+		flow.Height = max(12, m.Height-9)
+		return flow.View().Content
 	default:
 		return workspaceBody(m.Screen())
 	}
