@@ -34,6 +34,7 @@ type WorkspaceModel struct {
 	IntentPath                 string
 	Review                     ReviewScreen
 	ReviewFlow                 Model
+	Dashboard                  Dashboard
 	Comments                   CommentsScreen
 	CommentAction              string
 	CommentInput               string
@@ -363,6 +364,7 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ReviewFlow = flow
 		m.Comments = m.Comments.Reload(msg.Comments)
 		m.updateCompletionState()
+		m.updateDashboard()
 		if m.Screen() == ScreenIntentList {
 			m.nav.push(ScreenDashboard)
 		}
@@ -602,6 +604,14 @@ func (m WorkspaceModel) updateRecoveryKey(msg tea.KeyPressMsg) (tea.Model, tea.C
 	return m, nil
 }
 
+func (m *WorkspaceModel) updateDashboard() {
+	snapshotID := m.ReviewFlow.SnapshotPath
+	if selected := m.IntentList.Selected(); selected != nil && snapshotID == "" {
+		snapshotID = selected.SnapshotID
+	}
+	m.Dashboard = Dashboard{IntentID: m.IntentID, Lifecycle: m.Lifecycle, RevisionID: m.Revision, BlockerCount: len(m.ReviewFlow.ResumeBlockers()), SnapshotID: snapshotID}
+}
+
 func (m *WorkspaceModel) updateCompletionState() {
 	blockers := m.ReviewFlow.ResumeBlockers()
 	m.Completion.RevisionID = m.Revision
@@ -638,6 +648,7 @@ func (m WorkspaceModel) updateReview(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Review.SelectedID = flow.Items[flow.Selected].ID
 	}
 	m.updateCompletionState()
+	m.updateDashboard()
 	return m, cmd
 }
 
@@ -754,6 +765,8 @@ func (m WorkspaceModel) navigationBar() string {
 
 func (m WorkspaceModel) screenBody() string {
 	switch m.Screen() {
+	case ScreenDashboard:
+		return m.Dashboard.View()
 	case ScreenComments:
 		body := m.Comments.View()
 		if m.CommentAction != "" {

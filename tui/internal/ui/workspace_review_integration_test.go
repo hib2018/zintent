@@ -28,6 +28,20 @@ func (e *recordingReviewExecutor) ExecuteComment(operation, commentID, reason st
 	return nil
 }
 
+func TestWorkspaceDashboardReflectsCanonicalState(t *testing.T) {
+	m := NewWorkspace()
+	m.Width, m.Height = 120, 40
+	m.nav.push(ScreenDashboard)
+	next, _ := m.Update(WorkspaceCanonicalMsg{IntentID: "intent-1", RevisionID: "revision-1", Lifecycle: "in_review", IntentPath: "/tmp/intents/intent-1", Items: []Item{{ID: "item-1", Status: "unreviewed"}}, Comments: []CommentRecord{{ID: "comment-1", Status: "open"}}})
+	m = next.(WorkspaceModel)
+	view := m.View().Content
+	for _, expected := range []string{"DASHBOARD", "in_review", "Blockers  : 2", "r Review", "h History", "R Recovery"} {
+		if !strings.Contains(view, expected) {
+			t.Fatalf("dashboard missing %q in:\n%s", expected, view)
+		}
+	}
+}
+
 func TestWorkspaceCommentsResolveThroughCoreExecutor(t *testing.T) {
 	executor := &recordingReviewExecutor{}
 	m := NewWorkspace()
