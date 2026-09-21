@@ -114,6 +114,40 @@ func TestWorkspaceBackPreservesCurrentIntentSelection(t *testing.T) {
 	}
 }
 
+func TestWorkspaceApproveFromDashboardOpensChallengeFlow(t *testing.T) {
+	m := NewWorkspace()
+	m.Width, m.Height = 120, 40
+	m.nav.push(ScreenDashboard)
+	next, _ := m.Update(WorkspaceCanonicalMsg{
+		IntentID:   "intent-1",
+		RevisionID: "revision-1",
+		Lifecycle:  "review_complete",
+		IntentPath: "/tmp/intents/intent-1",
+		Items:      []Item{{ID: "item-1", Kind: "goal", Statement: "Approved candidate", Status: "accepted"}},
+	})
+	m = next.(WorkspaceModel)
+	executor := &recordingReviewExecutor{}
+	m.ReviewFlow.Executor = executor
+
+	next, _ = m.Update(workspaceKey("p"))
+	m = next.(WorkspaceModel)
+	if m.Screen() != ScreenReview || executor.operation != "prepare_approval" {
+		t.Fatalf("approval did not enter the review challenge flow: screen=%s operation=%q", m.Screen(), executor.operation)
+	}
+
+	m.ReviewFlow.Modal = "approval-confirm"
+	m.ReviewFlow.PendingAction = "approval-confirm"
+	m.ReviewFlow.RevisionHash = "revision-hash"
+	m.ReviewFlow.ApprovedContentHash = "content-hash"
+	m.ReviewFlow.Challenge = "APPROVE-123456"
+	view := m.View().Content
+	for _, expected := range []string{"APPROVAL CHALLENGE", "Revision hash", "Approved content hash", "APPROVE-123456", "Response"} {
+		if !strings.Contains(view, expected) {
+			t.Fatalf("approval input missing %q in:\n%s", expected, view)
+		}
+	}
+}
+
 func TestWorkspaceReviewDelegatesMutationToReviewModel(t *testing.T) {
 	m := NewWorkspace()
 	m.Width, m.Height = 120, 40

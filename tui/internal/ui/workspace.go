@@ -189,6 +189,10 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "f":
 			m.nav.push(ScreenCompletion)
 		case "p":
+			if m.IntentPath != "" {
+				m.nav.push(ScreenReview)
+				return m.updateReview(msg)
+			}
 			m.nav.push(ScreenApproval)
 		case "h":
 			m.nav.push(ScreenHistory)
@@ -463,22 +467,30 @@ func workspaceReviewBody(flow Model, width, height int) string {
 	prefix.WriteString("REVIEW\n")
 	fmt.Fprintf(&prefix, "  Lifecycle : %s\n  Revision  : %s\n", fallback(flow.Lifecycle, "-"), shortRef(fallback(flow.Revision, "-")))
 	if flow.Modal != "" {
-		itemID := "-"
-		if len(flow.Items) > 0 && flow.Selected >= 0 && flow.Selected < len(flow.Items) {
-			itemID = flow.Items[flow.Selected].ID
-		}
-		fmt.Fprintf(&prefix, "\nACTION\n  Type   : %s\n  Item   : %s\n  Keys   : Enter=confirm  Esc=cancel\n", flow.Modal, shortRef(itemID))
-		switch flow.PendingAction {
-		case "edit-preview":
-			prefix.WriteString("New statement: " + flow.Input + "\n")
-		case "comment":
-			prefix.WriteString("Comment: " + flow.Input + "\n")
-		case "reject":
-			prefix.WriteString("Rejection reason: " + flow.Input + "\n")
-		case "edit-confirm":
-			prefix.WriteString("Before: " + flow.Before + "\nAfter: " + flow.After + "\n")
-		case "approval-confirm":
-			prefix.WriteString("Challenge: " + flow.Challenge + "\nResponse: " + flow.Input + "\n")
+		if flow.PendingAction == "approval-confirm" {
+			prefix.WriteString("\nAPPROVAL CHALLENGE\n")
+			prefix.WriteString("  Revision ID          : " + flow.Revision + "\n")
+			prefix.WriteString("  Revision hash        : " + flow.RevisionHash + "\n")
+			prefix.WriteString("  Approved content hash: " + flow.ApprovedContentHash + "\n")
+			prefix.WriteString("  Challenge            : " + flow.Challenge + "\n")
+			prefix.WriteString("  Response             : " + flow.Input + "\n")
+			prefix.WriteString("  Keys                 : Enter=confirm  Esc=cancel\n")
+		} else {
+			itemID := "-"
+			if len(flow.Items) > 0 && flow.Selected >= 0 && flow.Selected < len(flow.Items) {
+				itemID = flow.Items[flow.Selected].ID
+			}
+			fmt.Fprintf(&prefix, "\nACTION\n  Type   : %s\n  Item   : %s\n  Keys   : Enter=confirm  Esc=cancel\n", flow.Modal, shortRef(itemID))
+			switch flow.PendingAction {
+			case "edit-preview":
+				prefix.WriteString("New statement: " + flow.Input + "\n")
+			case "comment":
+				prefix.WriteString("Comment: " + flow.Input + "\n")
+			case "reject":
+				prefix.WriteString("Rejection reason: " + flow.Input + "\n")
+			case "edit-confirm":
+				prefix.WriteString("Before: " + flow.Before + "\nAfter: " + flow.After + "\n")
+			}
 		}
 	}
 	if flow.Status != "" {
