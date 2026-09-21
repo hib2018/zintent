@@ -53,6 +53,21 @@ func (s IntentListScreen) Selected() *IntentEntry {
 	}
 	return nil
 }
+func (s *IntentListScreen) Move(delta int) {
+	visible := s.Visible()
+	if len(visible) == 0 {
+		return
+	}
+	index := 0
+	for i, e := range visible {
+		if e.ID == s.SelectedID {
+			index = i
+			break
+		}
+	}
+	index = max(0, min(index+delta, len(visible)-1))
+	s.SelectedID = visible[index].ID
+}
 func (s IntentListScreen) View() string {
 	var b strings.Builder
 	b.WriteString("Intent list\nFilter: " + s.Filter + "\n")

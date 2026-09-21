@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -82,12 +83,12 @@ func (c WorkspaceCoreCommands) OpenIntent(intentPath string) tea.Cmd {
 					Lifecycle       string `json:"lifecycle_state"`
 					RevisionPayload struct {
 						Items []struct {
-							ID         string `json:"item_id"`
-							Kind       string `json:"kind"`
-							Statement  string `json:"statement"`
-							Status     string `json:"review_status"`
-							Provenance string `json:"provenance"`
-							Rationale  string `json:"rationale"`
+							ID         string          `json:"item_id"`
+							Kind       string          `json:"kind"`
+							Statement  string          `json:"statement"`
+							Status     string          `json:"review_status"`
+							Provenance json.RawMessage `json:"provenance"`
+							Rationale  string          `json:"rationale"`
 						} `json:"items"`
 					} `json:"revision_payload"`
 				} `json:"intent"`
@@ -98,7 +99,7 @@ func (c WorkspaceCoreCommands) OpenIntent(intentPath string) tea.Cmd {
 		}
 		items := make([]Item, 0, len(result.Data.Intent.RevisionPayload.Items))
 		for _, item := range result.Data.Intent.RevisionPayload.Items {
-			items = append(items, Item{ID: item.ID, Kind: item.Kind, Statement: item.Statement, Status: item.Status, Provenance: item.Provenance, Rationale: item.Rationale})
+			items = append(items, Item{ID: item.ID, Kind: item.Kind, Statement: item.Statement, Status: item.Status, Provenance: provenanceText(item.Provenance), Rationale: item.Rationale})
 		}
 		return WorkspaceCanonicalMsg{IntentID: result.Data.Intent.IntentID, RevisionID: result.Data.Intent.RevisionID, Lifecycle: result.Data.Intent.Lifecycle, Items: items}
 	}
@@ -156,6 +157,21 @@ func (c WorkspaceCoreCommands) ListDrafts() tea.Cmd {
 		sort.SliceStable(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
 		return DraftListMsg{Root: root, Entries: entries}
 	}
+}
+
+func provenanceText(raw json.RawMessage) string {
+	if len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	var text string
+	if json.Unmarshal(raw, &text) == nil {
+		return text
+	}
+	var compact bytes.Buffer
+	if json.Compact(&compact, raw) == nil {
+		return compact.String()
+	}
+	return string(raw)
 }
 
 func (c WorkspaceCoreCommands) run(operation string, payload map[string]any) (protocol.Response, error) {

@@ -138,16 +138,20 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		switch key {
-		case "/":
+		case "j", "down":
 			if m.Screen() == ScreenIntentList {
-				m.IntentList.FilterEditing = true
+				m.IntentList.Move(1)
 			}
-		case "n":
+		case "k", "up":
 			if m.Screen() == ScreenIntentList {
-				m.Status = "loading Draft files"
-				if m.WorkspaceExecutor != nil {
-					return m, m.WorkspaceExecutor.ListDrafts()
-				}
+				m.IntentList.Move(-1)
+			}
+		case "/":
+			m.IntentList.FilterEditing = true
+		case "n":
+			m.Status = "loading Draft files"
+			if m.WorkspaceExecutor != nil {
+				return m, m.WorkspaceExecutor.ListDrafts()
 			}
 		case "enter":
 			if m.Screen() == ScreenIntentList {
@@ -300,17 +304,18 @@ func (m WorkspaceModel) View() tea.View {
 		height = 24
 	}
 	header := fmt.Sprintf("zintent workspace  %s  intent:%s  rev:%s", m.Screen(), fallback(m.IntentID, "-"), fallback(m.Revision, "-"))
-	navigation := m.navigationBody()
+	intents := m.IntentList.View()
 	main := m.screenBody()
-	bodyHeight := max(8, height-9)
+	bodyHeight := max(8, height-13)
+	mainTitle := "Main: " + m.Screen().String()
 	var body string
 	if width < 72 {
-		body = strings.Join(renderPane("Navigation", navigation, width, 7, false), "\n") + "\n" +
-			strings.Join(renderPane(m.Screen().String(), main, width, bodyHeight, true), "\n")
+		body = strings.Join(renderPane("Intents", intents, width, max(6, bodyHeight/3), m.Screen() == ScreenIntentList), "\n") + "\n" +
+			strings.Join(renderPane(mainTitle, main, width, bodyHeight, m.Screen() != ScreenIntentList), "\n")
 	} else {
 		left := max(24, width/4)
 		right := width - left - 1
-		body = joinPanes(renderPane("Navigation", navigation, left, bodyHeight, false), renderPane(m.Screen().String(), main, right, bodyHeight, true))
+		body = joinPanes(renderPane("Intents", intents, left, bodyHeight, m.Screen() == ScreenIntentList), renderPane(mainTitle, main, right, bodyHeight, m.Screen() != ScreenIntentList))
 	}
 	status := fallback(m.Status, "Ready")
 	var b strings.Builder
@@ -336,8 +341,10 @@ func (m WorkspaceModel) View() tea.View {
 		b.WriteString(strings.Join(renderPane("Import Draft", modal.String(), width, modalHeight, true), "\n"))
 	}
 	b.WriteByte('\n')
+	b.WriteString(strings.Join(renderPane("Nav", m.navigationBar(), width, 4, false), "\n"))
+	b.WriteByte('\n')
 	b.WriteString(strings.Join(renderPane("Status", status, width, 3, false), "\n"))
-	b.WriteString("\nenter open  esc back  r review  c comments  f complete  p approve  h history  v validate  q quit\n")
+	b.WriteString("\nenter open  esc back  q quit\n")
 	v := tea.NewView(b.String())
 	v.AltScreen = true
 	if m.IntentList.FilterEditing {
@@ -346,24 +353,25 @@ func (m WorkspaceModel) View() tea.View {
 	return v
 }
 
-func (m WorkspaceModel) navigationBody() string {
-	labels := []struct {
+func (m WorkspaceModel) navigationBar() string {
+	items := []struct {
 		screen Screen
-		key    string
+		label  string
 	}{
-		{ScreenIntentList, "•"}, {ScreenDashboard, "d"}, {ScreenReview, "r"},
-		{ScreenComments, "c"}, {ScreenCompletion, "f"}, {ScreenApproval, "p"},
-		{ScreenHistory, "h"}, {ScreenValidation, "v"}, {ScreenSnapshot, "s"}, {ScreenRecovery, "R"},
+		{ScreenReview, "r Review"}, {ScreenComments, "c Comments"}, {ScreenCompletion, "f Complete"},
+		{ScreenApproval, "p Approve"}, {ScreenHistory, "h History"}, {ScreenValidation, "v Validate"},
+		{ScreenSnapshot, "s Snapshot"}, {ScreenRecovery, "R Recovery"}, {ScreenIntentList, "n New Draft"},
 	}
-	var lines []string
-	for _, item := range labels {
-		marker := "  "
+	parts := make([]string, 0, len(items)+1)
+	for _, item := range items {
+		label := item.label
 		if item.screen == m.Screen() {
-			marker = "→ "
+			label = "[" + label + "]"
 		}
-		lines = append(lines, fmt.Sprintf("%s%s  %s", marker, item.key, item.screen))
+		parts = append(parts, label)
 	}
-	return strings.Join(lines, "\n")
+	parts = append(parts, "/ Search", "? Help")
+	return strings.Join(parts, "  ")
 }
 
 func (m WorkspaceModel) screenBody() string {
@@ -377,7 +385,7 @@ func (m WorkspaceModel) screenBody() string {
 	case ScreenRecovery:
 		return m.Recovery.View()
 	case ScreenIntentList:
-		return m.IntentList.View() + "\nn new Draft  / search"
+		return m.intentDetail()
 	default:
 		return workspaceBody(m.Screen())
 	}
@@ -388,6 +396,23 @@ func fallback(value, otherwise string) string {
 		return otherwise
 	}
 	return value
+}
+func (m WorkspaceModel) intentDetail() string {
+	selected := m.IntentList.Selected()
+	if selected == nil {
+		return "No Intent selected.\n\nSelect an Intent on the left or press n to import a Draft."
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Intent: %s\n", selected.ID)
+	fmt.Fprintf(&b, "Lifecycle: %s\nRevision: %s\nBlockers: %d\n", fallback(selected.Lifecycle, "-"), fallback(selected.Revision, "-"), selected.BlockerCount)
+	if selected.DisplayName != "" {
+		fmt.Fprintf(&b, "Name: %s\n", selected.DisplayName)
+	}
+	if selected.Corrupt {
+		fmt.Fprintf(&b, "CORRUPT: %s\n", selected.Finding)
+	}
+	b.WriteString("\nenter open  j/k select  / search  n import Draft")
+	return b.String()
 }
 func workspaceBody(screen Screen) string {
 	return map[Screen]string{

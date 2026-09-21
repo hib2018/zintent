@@ -15,16 +15,16 @@ func TestRenderPaneKeepsUnicodeBordersAligned(t *testing.T) {
 	}
 }
 
-func TestWorkspaceUsesFramedNavigationMainAndStatusPanes(t *testing.T) {
+func TestWorkspaceUsesFramedIntentMainNavAndStatusPanes(t *testing.T) {
 	m := NewWorkspace()
 	m.Width, m.Height = 100, 28
 	output := m.View().Content
-	for _, title := range []string{"Workspace", "Navigation", "[ intents ]", "Status"} {
+	for _, title := range []string{"Workspace", "[ Intents ]", "Main: intents", "Nav", "Status"} {
 		if !strings.Contains(output, title) {
 			t.Fatalf("missing pane %q:\n%s", title, output)
 		}
 	}
-	if strings.Count(output, "┌") < 4 || strings.Count(output, "┘") < 4 {
+	if strings.Count(output, "┌") < 5 || strings.Count(output, "┘") < 5 {
 		t.Fatalf("panes are not fully framed:\n%s", output)
 	}
 }

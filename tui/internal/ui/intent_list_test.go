@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,6 +20,16 @@ func (resumeExecutor) ImportDraft(ImportModal) tea.Cmd { return nil }
 func (resumeExecutor) OpenIntent(string) tea.Cmd {
 	return func() tea.Msg {
 		return WorkspaceCanonicalMsg{IntentID: "intent-a", RevisionID: "r1", Lifecycle: "in_review", Items: []Item{{ID: "done", Status: "accepted"}, {ID: "open", Status: "unreviewed"}}}
+	}
+}
+
+func TestProvenanceTextAcceptsObjectContract(t *testing.T) {
+	got := provenanceText(json.RawMessage(`{"content_origin":"human","operation_id":"op-1"}`))
+	if !strings.Contains(got, "content_origin") || !strings.Contains(got, "op-1") {
+		t.Fatal(got)
+	}
+	if provenanceText(json.RawMessage(`"legacy"`)) != "legacy" {
+		t.Fatal("legacy string provenance broke")
 	}
 }
 
