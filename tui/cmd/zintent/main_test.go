@@ -1,11 +1,23 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestDecodeReviewIntentReadsLifecycleFromRevisionPayload(t *testing.T) {
+	raw := json.RawMessage(`{"data":{"intent":{"revision_id":"revision-1","revision_payload":{"intent_id":"intent-1","lifecycle_state":"review_complete","items":[{"item_id":"item-1","kind":"goal","statement":"確認済み","review_status":"accepted"}]}}}}`)
+	intentID, revisionID, lifecycle, items, err := decodeReviewIntent(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if intentID != "intent-1" || revisionID != "revision-1" || lifecycle != "review_complete" || len(items) != 1 {
+		t.Fatalf("decoded wrong canonical level: intent=%q revision=%q lifecycle=%q items=%#v", intentID, revisionID, lifecycle, items)
+	}
+}
 
 func TestParseReadOnlyCommands(t *testing.T) {
 	o, err := parseArgs([]string{"show", "intent", "--output", "json", "--core", "core"})

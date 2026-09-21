@@ -255,9 +255,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Data struct {
 				Intent struct {
 					RevisionID string `json:"revision_id"`
-					Lifecycle  string `json:"lifecycle_state"`
 					Payload    struct {
-						Items []struct {
+						Lifecycle string `json:"lifecycle_state"`
+						Items     []struct {
 							ID        string `json:"item_id"`
 							Kind      string `json:"kind"`
 							Statement string `json:"statement"`
@@ -275,7 +275,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.Items) > 0 && m.Selected < len(m.Items) {
 			selectedID = m.Items[m.Selected].ID
 		}
-		m.Revision, m.Lifecycle = result.Data.Intent.RevisionID, result.Data.Intent.Lifecycle
+		m.Revision, m.Lifecycle = result.Data.Intent.RevisionID, result.Data.Intent.Payload.Lifecycle
 		m.Items = make([]Item, 0, len(result.Data.Intent.Payload.Items))
 		m.Selected = 0
 		for _, item := range result.Data.Intent.Payload.Items {

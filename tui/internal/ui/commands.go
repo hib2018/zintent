@@ -75,44 +75,49 @@ func (c WorkspaceCoreCommands) OpenIntent(intentPath string) tea.Cmd {
 		if !response.OK {
 			return WorkspaceCanonicalMsg{Err: errors.New(response.Error.Message)}
 		}
-		var result struct {
-			Data struct {
-				Intent struct {
-					IntentID        string `json:"intent_id"`
-					RevisionID      string `json:"revision_id"`
-					Lifecycle       string `json:"lifecycle_state"`
-					RevisionPayload struct {
-						Items []struct {
-							ID         string          `json:"item_id"`
-							Kind       string          `json:"kind"`
-							Statement  string          `json:"statement"`
-							Status     string          `json:"review_status"`
-							Provenance json.RawMessage `json:"provenance"`
-							Rationale  string          `json:"rationale"`
-						} `json:"items"`
-						Comments []struct {
-							ID           string `json:"comment_id"`
-							TargetItemID string `json:"target_item_id"`
-							Body         string `json:"body"`
-							Status       string `json:"status"`
-						} `json:"comments"`
-					} `json:"revision_payload"`
-				} `json:"intent"`
-			} `json:"data"`
-		}
-		if err := json.Unmarshal(response.Result, &result); err != nil {
-			return WorkspaceCanonicalMsg{Err: err}
-		}
-		items := make([]Item, 0, len(result.Data.Intent.RevisionPayload.Items))
-		for _, item := range result.Data.Intent.RevisionPayload.Items {
-			items = append(items, Item{ID: item.ID, Kind: item.Kind, Statement: item.Statement, Status: item.Status, Provenance: provenanceText(item.Provenance), Rationale: item.Rationale})
-		}
-		comments := make([]CommentRecord, 0, len(result.Data.Intent.RevisionPayload.Comments))
-		for _, comment := range result.Data.Intent.RevisionPayload.Comments {
-			comments = append(comments, CommentRecord{ID: comment.ID, TargetItemID: comment.TargetItemID, Body: comment.Body, Status: comment.Status})
-		}
-		return WorkspaceCanonicalMsg{IntentID: result.Data.Intent.IntentID, RevisionID: result.Data.Intent.RevisionID, Lifecycle: result.Data.Intent.Lifecycle, IntentPath: filepath.Join(c.WorkspacePath, intentPath), Items: items, Comments: comments}
+		return decodeWorkspaceIntent(response.Result, filepath.Join(c.WorkspacePath, intentPath))
 	}
+}
+
+func decodeWorkspaceIntent(raw json.RawMessage, intentPath string) WorkspaceCanonicalMsg {
+	var result struct {
+		Data struct {
+			Intent struct {
+				RevisionID      string `json:"revision_id"`
+				RevisionPayload struct {
+					IntentID  string `json:"intent_id"`
+					Lifecycle string `json:"lifecycle_state"`
+					Items     []struct {
+						ID         string          `json:"item_id"`
+						Kind       string          `json:"kind"`
+						Statement  string          `json:"statement"`
+						Status     string          `json:"review_status"`
+						Provenance json.RawMessage `json:"provenance"`
+						Rationale  string          `json:"rationale"`
+					} `json:"items"`
+					Comments []struct {
+						ID           string `json:"comment_id"`
+						TargetItemID string `json:"target_item_id"`
+						Body         string `json:"body"`
+						Status       string `json:"status"`
+					} `json:"comments"`
+				} `json:"revision_payload"`
+			} `json:"intent"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return WorkspaceCanonicalMsg{Err: err}
+	}
+	payload := result.Data.Intent.RevisionPayload
+	items := make([]Item, 0, len(payload.Items))
+	for _, item := range payload.Items {
+		items = append(items, Item{ID: item.ID, Kind: item.Kind, Statement: item.Statement, Status: item.Status, Provenance: provenanceText(item.Provenance), Rationale: item.Rationale})
+	}
+	comments := make([]CommentRecord, 0, len(payload.Comments))
+	for _, comment := range payload.Comments {
+		comments = append(comments, CommentRecord{ID: comment.ID, TargetItemID: comment.TargetItemID, Body: comment.Body, Status: comment.Status})
+	}
+	return WorkspaceCanonicalMsg{IntentID: payload.IntentID, RevisionID: result.Data.Intent.RevisionID, Lifecycle: payload.Lifecycle, IntentPath: intentPath, Items: items, Comments: comments}
 }
 
 type WorkspaceCoreCommands struct {

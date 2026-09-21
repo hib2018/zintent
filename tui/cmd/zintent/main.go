@@ -164,14 +164,33 @@ func runReview(ctx context.Context, parsed options) error {
 		}
 		return errors.New("show_intent failed")
 	}
+	intentID, revisionID, lifecycle, items, err := decodeReviewIntent(response.Result)
+	if err != nil {
+		return err
+	}
+	actor, _ := parsed.payload["actor"].(map[string]any)
+	actorID, _ := actor["actor_id"].(string)
+	model := ui.New(items)
+	model.IntentID = intentID
+	model.Revision = revisionID
+	model.Lifecycle = lifecycle
+	model.Actor = actorID
+	model.IntentPath, _ = parsed.payload["intent_path"].(string)
+	model.ExpectedRevision = model.Revision
+	model.Executor = &ui.CoreCommands{Core: core, IntentPath: model.IntentPath, Expected: model.ExpectedRevision, Actor: actor}
+	_, err = tea.NewProgram(model).Run()
+	return err
+}
+
+func decodeReviewIntent(raw json.RawMessage) (string, string, string, []ui.Item, error) {
 	var result struct {
 		Data struct {
 			Intent struct {
-				IntentID        string `json:"intent_id"`
 				RevisionID      string `json:"revision_id"`
-				Lifecycle       string `json:"lifecycle_state"`
 				RevisionPayload struct {
-					Items []struct {
+					IntentID  string `json:"intent_id"`
+					Lifecycle string `json:"lifecycle_state"`
+					Items     []struct {
 						ID        string `json:"item_id"`
 						Kind      string `json:"kind"`
 						Statement string `json:"statement"`
@@ -181,25 +200,15 @@ func runReview(ctx context.Context, parsed options) error {
 			} `json:"intent"`
 		} `json:"data"`
 	}
-	if err := json.Unmarshal(response.Result, &result); err != nil {
-		return err
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return "", "", "", nil, err
 	}
-	items := make([]ui.Item, 0, len(result.Data.Intent.RevisionPayload.Items))
-	for _, item := range result.Data.Intent.RevisionPayload.Items {
+	payload := result.Data.Intent.RevisionPayload
+	items := make([]ui.Item, 0, len(payload.Items))
+	for _, item := range payload.Items {
 		items = append(items, ui.Item{ID: item.ID, Kind: item.Kind, Statement: item.Statement, Status: item.Status})
 	}
-	actor, _ := parsed.payload["actor"].(map[string]any)
-	actorID, _ := actor["actor_id"].(string)
-	model := ui.New(items)
-	model.IntentID = result.Data.Intent.IntentID
-	model.Revision = result.Data.Intent.RevisionID
-	model.Lifecycle = result.Data.Intent.Lifecycle
-	model.Actor = actorID
-	model.IntentPath, _ = parsed.payload["intent_path"].(string)
-	model.ExpectedRevision = model.Revision
-	model.Executor = &ui.CoreCommands{Core: core, IntentPath: model.IntentPath, Expected: model.ExpectedRevision, Actor: actor}
-	_, err = tea.NewProgram(model).Run()
-	return err
+	return payload.IntentID, result.Data.Intent.RevisionID, payload.Lifecycle, items, nil
 }
 
 func stdinIsTerminal() bool {
