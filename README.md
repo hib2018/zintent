@@ -2,6 +2,25 @@
 
 zintent は、Intentを人間がレビューし、決定論的なコアで検証・承認するためのプロセス基盤です。Zigコアが状態遷移、ハッシュ、永続化を所有し、Go CLI/TUIは同じプロトコルを呼び出します。
 
+Z Ecosystem 全体の共通方針・横断Skill・Artifact Flow は [`hib2018/zecosystem`](https://github.com/hib2018/zecosystem) が管理します。このリポジトリは zintent 固有の Domain、Contract、Schema、CLI/TUI、tool-specific Skill を所有します。
+
+## 前提条件
+
+- zintent は Human-controlled Artifact Pipeline の最初の Meaning Gate として使います。実装計画やTask定義は作りません。
+- Agent Skill は公開 `zintent` CLI/TUI を編成するだけで、Intent revision、`HEAD.json`、Snapshot、capability を直接編集しません。
+- 状態遷移、eligibility、hash、永続化、不変条件は Zig Core が所有します。
+- Approval challenge への応答は人間だけが TTY で行います。Agent やSkillが代行、推測、転記、自動送信してはいけません。
+- Approved Intent Snapshot は後続工程への入力Artifactです。Spec Kit などへの handoff 方針は zecosystem の global Skill が管理します。
+
+## Z Ecosystem における境界
+
+| 領域 | 所有者 |
+|---|---|
+| Meaning Gate のDomain、Intent lifecycle、Snapshot contract | このリポジトリ |
+| `zintent-review` / `zintent-approve` など zintent 固有Skill | このリポジトリ |
+| 横断的な `zintent` 利用方針、`speckit-handoff` | `zecosystem` |
+| Pi/Codex 等のharness設定やsymlink配線 | `dotfiles` |
+
 ## ビルド
 
 Zig 0.16.0 と Go 1.27.1 を用意し、次を実行します。
