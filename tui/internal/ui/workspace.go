@@ -141,6 +141,9 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.Modal = ModalClosed
 			} else {
 				m.nav.back()
+				if m.Screen() == ScreenIntentList && m.IntentID != "" {
+					m.IntentList.SelectedID = m.IntentID
+				}
 			}
 			return m, nil
 		}
@@ -210,6 +213,7 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			break
 		}
 		m.IntentID, m.Revision, m.Lifecycle, m.IntentPath = msg.IntentID, msg.RevisionID, msg.Lifecycle, msg.IntentPath
+		m.IntentList.SelectedID = msg.IntentID
 		m.Review = m.Review.Reload(msg.Items)
 		if msg.SelectedID != "" {
 			m.Review.SelectedID = msg.SelectedID
@@ -397,7 +401,7 @@ func (m WorkspaceModel) View() tea.View {
 	b.WriteString("\nenter open  esc back  q quit\n")
 	v := tea.NewView(b.String())
 	v.AltScreen = true
-	if m.IntentList.FilterEditing {
+	if m.IntentList.FilterEditing || m.Screen() == ScreenReview && reviewAcceptsText(m.ReviewFlow) {
 		v.Cursor = tea.NewCursor(0, 0)
 	}
 	return v
@@ -440,12 +444,75 @@ func (m WorkspaceModel) screenBody() string {
 		if m.IntentPath == "" {
 			return "Review\nNo Intent selected."
 		}
-		flow := m.ReviewFlow
-		flow.Width = max(40, m.Width-max(24, m.Width/4)-3)
-		flow.Height = max(12, m.Height-9)
-		return flow.View().Content
+		width := m.Width
+		if width >= 72 {
+			width -= max(24, width/4) + 3
+		}
+		return workspaceReviewBody(m.ReviewFlow, max(40, width), max(8, m.Height-15))
 	default:
 		return workspaceBody(m.Screen())
+	}
+}
+
+func workspaceReviewBody(flow Model, width, height int) string {
+	var prefix strings.Builder
+	fmt.Fprintf(&prefix, "Lifecycle: %s  Revision: %s\n", fallback(flow.Lifecycle, "-"), fallback(flow.Revision, "-"))
+	if flow.Modal != "" {
+		itemID := "-"
+		if len(flow.Items) > 0 && flow.Selected >= 0 && flow.Selected < len(flow.Items) {
+			itemID = flow.Items[flow.Selected].ID
+		}
+		fmt.Fprintf(&prefix, "ACTION: %s for %s  Enter=confirm Esc=cancel\n", flow.Modal, itemID)
+		switch flow.PendingAction {
+		case "edit-preview":
+			prefix.WriteString("New statement: " + flow.Input + "\n")
+		case "comment":
+			prefix.WriteString("Comment: " + flow.Input + "\n")
+		case "reject":
+			prefix.WriteString("Rejection reason: " + flow.Input + "\n")
+		case "edit-confirm":
+			prefix.WriteString("Before: " + flow.Before + "\nAfter: " + flow.After + "\n")
+		case "approval-confirm":
+			prefix.WriteString("Challenge: " + flow.Challenge + "\nResponse: " + flow.Input + "\n")
+		}
+	}
+	if flow.Status != "" {
+		prefix.WriteString("Status: " + flow.Status + "\n")
+	}
+
+	var list, detail strings.Builder
+	for i, item := range flow.Items {
+		marker := "  "
+		if i == flow.Selected {
+			marker = "→ "
+		}
+		fmt.Fprintf(&list, "%s%s [%s] %s\n", marker, item.ID, item.Status, item.Statement)
+	}
+	if len(flow.Items) > 0 && flow.Selected >= 0 && flow.Selected < len(flow.Items) {
+		selected := flow.Items[flow.Selected]
+		fmt.Fprintf(&detail, "%s / %s\n\n%s\n", selected.ID, selected.Kind, selected.Statement)
+		if selected.Provenance != "" {
+			detail.WriteString("provenance: " + selected.Provenance + "\n")
+		}
+		if selected.Rationale != "" {
+			detail.WriteString("rationale: " + selected.Rationale + "\n")
+		}
+	}
+
+	prefixLines := strings.Count(prefix.String(), "\n")
+	paneHeight := max(5, height-prefixLines-2)
+	left := max(24, width*2/5)
+	right := max(16, width-left-1)
+	body := joinPanes(renderPane("Items", list.String(), left, paneHeight, true), renderPane("Item Detail", detail.String(), right, paneHeight, false))
+	return prefix.String() + body + "\n↑/↓ j/k navigate  a accept  e edit  c comment  x reject  f complete  p approve"
+}
+
+func reviewAcceptsText(flow Model) bool {
+	switch flow.PendingAction {
+	case "edit-preview", "comment", "reject", "approval-confirm":
+		return flow.Modal != ""
+	default:
+		return false
 	}
 }
 

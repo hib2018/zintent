@@ -51,6 +51,61 @@ func TestWorkspaceReviewRendersCanonicalItemsAndMovesSelection(t *testing.T) {
 	}
 }
 
+func TestWorkspaceReviewShowsCommentInputWithoutClipping(t *testing.T) {
+	m := NewWorkspace()
+	m.Width, m.Height = 120, 40
+	m.nav.push(ScreenReview)
+	next, _ := m.Update(WorkspaceCanonicalMsg{
+		IntentID:   "intent-ja",
+		RevisionID: "revision-ja",
+		Lifecycle:  "in_review",
+		IntentPath: "/tmp/intents/intent-ja",
+		Items:      []Item{{ID: "item-ja", Kind: "goal", Statement: "日本語の項目", Status: "unreviewed"}},
+	})
+	m = next.(WorkspaceModel)
+
+	next, _ = m.Update(workspaceKey("c"))
+	m = next.(WorkspaceModel)
+	view := m.View()
+	for _, expected := range []string{"ACTION: comment", "Comment:"} {
+		if !strings.Contains(view.Content, expected) {
+			t.Fatalf("comment input missing %q in:\n%s", expected, view.Content)
+		}
+	}
+	if view.Cursor == nil {
+		t.Fatal("comment input must expose a cursor")
+	}
+}
+
+func TestWorkspaceBackPreservesCurrentIntentSelection(t *testing.T) {
+	m := NewWorkspace()
+	m.Width, m.Height = 120, 40
+	m.IntentList = m.IntentList.Reload([]IntentEntry{
+		{ID: "intent-en", DisplayName: "English draft", Lifecycle: "draft"},
+		{ID: "intent-ja", DisplayName: "日本語ドラフト", Lifecycle: "draft"},
+	})
+	m.nav.push(ScreenReview)
+	next, _ := m.Update(WorkspaceCanonicalMsg{
+		IntentID:   "intent-ja",
+		RevisionID: "revision-ja",
+		Lifecycle:  "draft",
+		IntentPath: "/tmp/intents/intent-ja",
+		Items:      []Item{{ID: "item-ja", Kind: "goal", Statement: "日本語の項目", Status: "unreviewed"}},
+	})
+	m = next.(WorkspaceModel)
+
+	next, _ = m.Update(workspaceKey("esc"))
+	m = next.(WorkspaceModel)
+	next, _ = m.Update(workspaceKey("esc"))
+	m = next.(WorkspaceModel)
+	if m.Screen() != ScreenIntentList || m.IntentList.SelectedID != "intent-ja" {
+		t.Fatalf("back changed current selection: screen=%s selected=%q", m.Screen(), m.IntentList.SelectedID)
+	}
+	if view := m.View().Content; !strings.Contains(view, "日本語ドラフト") {
+		t.Fatalf("current Japanese Intent not shown after back:\n%s", view)
+	}
+}
+
 func TestWorkspaceReviewDelegatesMutationToReviewModel(t *testing.T) {
 	m := NewWorkspace()
 	m.Width, m.Height = 120, 40
