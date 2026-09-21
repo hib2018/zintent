@@ -491,8 +491,7 @@ func workspaceReviewBody(flow Model, width, height int) string {
 		if i == flow.Selected {
 			marker = "→ "
 		}
-		fmt.Fprintf(&list, "%s[%s] %s\n", marker, fallback(item.Status, "unreviewed"), item.Kind)
-		fmt.Fprintf(&list, "  %s\n", item.Statement)
+		list.WriteString(reviewItemText(marker, item))
 	}
 	if len(flow.Items) > 0 && flow.Selected >= 0 && flow.Selected < len(flow.Items) {
 		selected := flow.Items[flow.Selected]

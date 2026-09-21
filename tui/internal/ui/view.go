@@ -25,8 +25,7 @@ func renderView(m Model) tea.View {
 		} else {
 			list.WriteString("  ")
 		}
-		list.WriteString("[" + fallback(item.Status, "unreviewed") + "] " + item.Kind + "\n")
-		list.WriteString("  " + item.Statement + "\n")
+		list.WriteString(reviewItemText("", item))
 	}
 
 	if len(m.Items) > 0 {
@@ -113,6 +112,10 @@ func renderView(m Model) tea.View {
 	}
 	b.WriteString("\n↑/↓ j/k navigate  a accept  e edit  c comment  x reject  f complete  p approve  q quit\n")
 	return tea.NewView(b.String())
+}
+
+func reviewItemText(marker string, item Item) string {
+	return marker + "[" + fallback(item.Status, "unreviewed") + "] " + item.Kind + "  " + item.Statement + "\n\n"
 }
 
 func shortRef(value string) string {
