@@ -317,6 +317,12 @@ func (m WorkspaceModel) updateReview(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.Revision, m.Lifecycle = flow.Revision, flow.Lifecycle
 	m.Quitting = flow.Quitting
 	m.Status = flow.Status
+	for index := range m.IntentList.Entries {
+		if m.IntentList.Entries[index].ID == m.IntentID {
+			m.IntentList.Entries[index].Revision = m.Revision
+			m.IntentList.Entries[index].Lifecycle = m.Lifecycle
+		}
+	}
 	m.Review = m.Review.Reload(flow.Items)
 	if len(flow.Items) > 0 && flow.Selected >= 0 && flow.Selected < len(flow.Items) {
 		m.Review.SelectedID = flow.Items[flow.Selected].ID
@@ -493,8 +499,11 @@ func workspaceReviewBody(flow Model, width, height int) string {
 			}
 		}
 	}
+	if flow.SnapshotPath != "" {
+		prefix.WriteString("\nAPPROVED SNAPSHOT\n  " + flow.SnapshotPath + "\n")
+	}
 	if flow.Status != "" {
-		prefix.WriteString("Status: " + flow.Status + "\n")
+		prefix.WriteString("\nSTATUS\n  " + flow.Status + "\n")
 	}
 
 	var list, detail strings.Builder

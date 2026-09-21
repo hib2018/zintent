@@ -146,8 +146,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.Input = ""
 			}
 		case "f":
+			if m.Lifecycle == "review_complete" || m.Lifecycle == "approved" {
+				m.Status = "review is already complete; press p to approve"
+				break
+			}
 			if m.Executor != nil {
 				m.Status = "completing review"
+				m.Modal, m.PendingAction = "submitting", "complete-review"
 				return m, m.Executor.Execute("complete_review", "", nil)
 			}
 		case "p":
@@ -163,9 +168,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case ActionResultMsg:
 		if msg.Err != nil {
-			m.Modal = "error"
+			m.Modal, m.PendingAction, m.Input = "error", "", ""
 			m.Status = "mutation failed: " + msg.Err.Error()
 		} else if !msg.Response.OK {
+			m.Modal, m.PendingAction, m.Input = "error", "", ""
 			if msg.Response.Error != nil {
 				m.Status = msg.Response.Error.Code + ": " + msg.Response.Error.Message
 			} else {
@@ -218,7 +224,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Modal = "approval-confirm"
 			m.Status = "type the displayed challenge exactly"
 		} else {
-			m.Modal, m.PendingAction, m.Input = "", "", ""
+			m.Modal, m.PendingAction, m.Input = "reload-loading", msg.Operation, ""
 			if msg.Operation == "approve_intent" {
 				var result struct {
 					Data struct {
@@ -236,10 +242,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case ReloadResultMsg:
 		if msg.Err != nil {
+			m.Modal, m.PendingAction = "error", ""
 			m.Status = "reload failed: " + msg.Err.Error()
 			break
 		}
 		if !msg.Response.OK {
+			m.Modal, m.PendingAction = "error", ""
 			m.Status = "reload failed"
 			break
 		}
@@ -280,7 +288,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if setter, ok := m.Executor.(interface{ SetExpected(string) }); ok {
 			setter.SetExpected(m.Revision)
 		}
-		m.Status = "reloaded " + m.Revision
+		m.Modal, m.PendingAction = "", ""
+		if m.SnapshotPath != "" && m.Lifecycle == "approved" {
+			m.Status = "approval completed; snapshot issued"
+		} else {
+			m.Status = "reloaded " + shortRef(m.Revision)
+		}
 	case tea.WindowSizeMsg:
 		m.Width, m.Height = msg.Width, msg.Height
 	}
@@ -291,6 +304,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // a modal is open, letters that are normally commands are inserted as text and
 // can never trigger review mutations or navigation.
 func (m Model) updateModalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if m.Modal == "preview-loading" || m.Modal == "approval-loading" || m.Modal == "submitting" || m.Modal == "reload-loading" {
+		if msg.String() == "ctrl+c" {
+			m.Quitting = true
+			return m, tea.Quit
+		}
+		return m, nil
+	}
 	switch msg.String() {
 	case "ctrl+c":
 		m.Quitting = true
@@ -331,7 +351,7 @@ func (m Model) confirmPending() (tea.Model, tea.Cmd) {
 	m.Status = m.PendingAction + " requested for " + shortRef(itemID)
 	switch m.PendingAction {
 	case "accept":
-		m.Modal, m.PendingAction = "", ""
+		m.Modal, m.PendingAction = "submitting", "accept"
 		return m, m.Executor.Execute("accept_item", itemID, nil)
 	case "comment":
 		if strings.TrimSpace(m.Input) == "" {
@@ -339,7 +359,7 @@ func (m Model) confirmPending() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		body := m.Input
-		m.Modal, m.PendingAction, m.Input = "", "", ""
+		m.Modal, m.PendingAction, m.Input = "submitting", "comment", ""
 		return m, m.Executor.Execute("add_comment", itemID, map[string]any{"body": body})
 	case "reject":
 		if strings.TrimSpace(m.Input) == "" {
@@ -347,7 +367,7 @@ func (m Model) confirmPending() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		rationale := m.Input
-		m.Modal, m.PendingAction, m.Input = "", "", ""
+		m.Modal, m.PendingAction, m.Input = "submitting", "reject", ""
 		return m, m.Executor.Execute("reject_item", itemID, map[string]any{"rationale": rationale})
 	case "edit-preview":
 		if strings.TrimSpace(m.Input) == "" {

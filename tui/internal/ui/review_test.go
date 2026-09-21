@@ -87,6 +87,22 @@ func TestReviewReducerIgnoresReleaseAndKeepsStableIDSelection(t *testing.T) {
 	}
 }
 
+func TestCompleteBlocksRepeatedCommandsWhileInFlight(t *testing.T) {
+	executor := &countingExecutor{}
+	m := New([]Item{{ID: "i1", Status: "accepted"}})
+	m.Lifecycle = "in_review"
+	m.Executor = executor
+	next, _ := m.Update(tea.KeyPressMsg(tea.Key{Text: "f", Code: 'f'}))
+	m = next.(Model)
+	if m.Modal != "submitting" || executor.count != 1 {
+		t.Fatalf("completion not marked in flight: modal=%q count=%d", m.Modal, executor.count)
+	}
+	next, _ = m.Update(tea.KeyPressMsg(tea.Key{Text: "f", Code: 'f'}))
+	if next.(Model).Modal != "submitting" || executor.count != 1 {
+		t.Fatalf("repeated completion dispatched: modal=%q count=%d", next.(Model).Modal, executor.count)
+	}
+}
+
 func TestConfirmedAcceptDispatchesThroughExecutor(t *testing.T) {
 	m := New([]Item{{ID: "i1"}})
 	m.Executor = fakeExecutor{}
@@ -98,6 +114,13 @@ func TestConfirmedAcceptDispatchesThroughExecutor(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("confirmed action must dispatch")
 	}
+}
+
+type countingExecutor struct{ count int }
+
+func (e *countingExecutor) Execute(string, string, map[string]any) tea.Cmd {
+	e.count++
+	return func() tea.Msg { return nil }
 }
 
 type fakeExecutor struct{}

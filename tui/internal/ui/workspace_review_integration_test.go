@@ -1,19 +1,23 @@
 package ui
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/hib2018/zintent/tui/internal/protocol"
 )
 
 type recordingReviewExecutor struct {
 	operation string
 	itemID    string
+	count     int
 }
 
 func (e *recordingReviewExecutor) Execute(operation, itemID string, _ map[string]any) tea.Cmd {
 	e.operation, e.itemID = operation, itemID
+	e.count++
 	return nil
 }
 
@@ -135,16 +139,24 @@ func TestWorkspaceApproveFromDashboardOpensChallengeFlow(t *testing.T) {
 		t.Fatalf("approval did not enter the review challenge flow: screen=%s operation=%q", m.Screen(), executor.operation)
 	}
 
-	m.ReviewFlow.Modal = "approval-confirm"
-	m.ReviewFlow.PendingAction = "approval-confirm"
-	m.ReviewFlow.RevisionHash = "revision-hash"
-	m.ReviewFlow.ApprovedContentHash = "content-hash"
-	m.ReviewFlow.Challenge = "APPROVE-123456"
+	next, _ = m.Update(ActionResultMsg{
+		Operation: "prepare_approval",
+		Response:  protocol.Response{OK: true, Result: json.RawMessage(`{"data":{"confirmation":{"token_id":"token-1","challenge":"APPROVE-123456","confirmed_revision_id":"revision-1","confirmed_revision_hash":"revision-hash","approved_content_hash":"content-hash"}}}`)},
+	})
+	m = next.(WorkspaceModel)
 	view := m.View().Content
 	for _, expected := range []string{"APPROVAL CHALLENGE", "Revision hash", "Approved content hash", "APPROVE-123456", "Response"} {
 		if !strings.Contains(view, expected) {
 			t.Fatalf("approval input missing %q in:\n%s", expected, view)
 		}
+	}
+
+	next, _ = m.Update(tea.KeyPressMsg(tea.Key{Text: "APPROVE-123456", Code: '?'}))
+	m = next.(WorkspaceModel)
+	next, _ = m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	m = next.(WorkspaceModel)
+	if executor.operation != "approve_intent" || executor.count != 2 || m.ReviewFlow.Modal != "submitting" {
+		t.Fatalf("challenge did not dispatch approval: operation=%q count=%d modal=%q", executor.operation, executor.count, m.ReviewFlow.Modal)
 	}
 }
 
