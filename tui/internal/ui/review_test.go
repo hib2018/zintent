@@ -39,10 +39,37 @@ func TestReviewModalCanCancelAndConfirm(t *testing.T) {
 	if got.Modal != "" || got.Status != "" {
 		t.Fatalf("escape should cancel modal: %#v", got)
 	}
+	got.Executor = fakeExecutor{}
 	next, _ = got.Update(tea.KeyPressMsg(tea.Key{Text: "x", Code: 'x'}))
-	next, _ = next.(Model).Update(tea.KeyPressMsg(tea.Key{Text: "enter", Code: 13}))
-	if next.(Model).Status != "reject confirmed for i1" {
-		t.Fatalf("expected confirmation status: %#v", next.(Model))
+	next, _ = next.(Model).Update(tea.KeyPressMsg(tea.Key{Text: "対象外", Code: '?'}))
+	_, cmd := next.(Model).Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	if cmd == nil {
+		t.Fatal("reject with a reason must dispatch")
+	}
+}
+
+func TestReviewTextInputOwnsCommandsAndPreservesJapanese(t *testing.T) {
+	m := New([]Item{{ID: "i1"}, {ID: "i2"}})
+	next, _ := m.Update(tea.KeyPressMsg(tea.Key{Text: "c", Code: 'c'}))
+	m = next.(Model)
+	for _, text := range []string{"a", "j", "f", "p", "日本語"} {
+		next, cmd := m.Update(tea.KeyPressMsg(tea.Key{Text: text, Code: '?'}))
+		if cmd != nil {
+			t.Fatalf("text %q triggered a command", text)
+		}
+		m = next.(Model)
+	}
+	next, _ = m.Update(tea.PasteMsg{Content: "を入力"})
+	m = next.(Model)
+	if m.PendingAction != "comment" || m.Selected != 0 {
+		t.Fatalf("input changed review command state: %#v", m)
+	}
+	if m.Input != "ajfp日本語を入力" {
+		t.Fatalf("input=%q", m.Input)
+	}
+	next, _ = m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyBackspace}))
+	if got := next.(Model).Input; got != "ajfp日本語を入" {
+		t.Fatalf("rune backspace corrupted Japanese input: %q", got)
 	}
 }
 

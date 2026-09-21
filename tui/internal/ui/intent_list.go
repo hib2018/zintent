@@ -87,7 +87,7 @@ func (s IntentListScreen) View() string {
 		} else {
 			b.WriteString("  ")
 		}
-		b.WriteString(e.ID + " [" + e.Lifecycle + "] blockers:")
+		b.WriteString(shortRef(e.ID) + "  [" + e.Lifecycle + "]  blockers:")
 		b.WriteString(strconv.Itoa(e.BlockerCount))
 		if e.Corrupt {
 			b.WriteString(" CORRUPT " + e.Finding)

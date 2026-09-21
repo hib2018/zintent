@@ -183,6 +183,26 @@ func provenanceText(raw json.RawMessage) string {
 	if json.Unmarshal(raw, &text) == nil {
 		return text
 	}
+	var provenance struct {
+		ContentOrigin  string `json:"content_origin"`
+		OperationType  string `json:"operation_type"`
+		OperationActor *struct {
+			ActorID string `json:"actor_id"`
+		} `json:"operation_actor"`
+	}
+	if json.Unmarshal(raw, &provenance) == nil && (provenance.ContentOrigin != "" || provenance.OperationType != "") {
+		parts := make([]string, 0, 3)
+		if provenance.ContentOrigin != "" {
+			parts = append(parts, "origin="+provenance.ContentOrigin)
+		}
+		if provenance.OperationType != "" {
+			parts = append(parts, "operation="+provenance.OperationType)
+		}
+		if provenance.OperationActor != nil && provenance.OperationActor.ActorID != "" {
+			parts = append(parts, "actor="+provenance.OperationActor.ActorID)
+		}
+		return strings.Join(parts, "  ")
+	}
 	var compact bytes.Buffer
 	if json.Compact(&compact, raw) == nil {
 		return compact.String()

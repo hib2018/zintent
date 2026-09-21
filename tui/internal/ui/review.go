@@ -2,6 +2,7 @@ package ui
 
 import (
 	"encoding/json"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -120,15 +121,14 @@ func (m Model) Init() tea.Cmd { return nil }
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
+		if m.Modal != "" {
+			return m.updateModalKey(msg)
+		}
 		switch msg.String() {
 		case "ctrl+c":
 			m.Quitting = true
 			return m, tea.Quit
 		case "q":
-			if m.Modal != "" {
-				m.Input += "q"
-				break
-			}
 			m.Quitting = true
 			return m, tea.Quit
 		case "j", "down":
@@ -143,6 +143,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.Items) > 0 {
 				m.PendingAction = map[string]string{"a": "accept", "e": "edit-preview", "c": "comment", "x": "reject"}[msg.String()]
 				m.Modal = m.PendingAction
+				m.Input = ""
 			}
 		case "f":
 			if m.Executor != nil {
@@ -155,56 +156,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.Executor.Execute("prepare_approval", "", map[string]any{"interactive_tty": true})
 			}
 			m.Status = "approval requires a review-complete Intent"
-		case "enter":
-			if m.Modal != "" {
-				itemID := ""
-				if len(m.Items) > 0 && m.Selected < len(m.Items) {
-					itemID = m.Items[m.Selected].ID
-				}
-				m.Status = m.PendingAction + " requested for " + itemID
-				if m.Executor != nil {
-					operation := map[string]string{"accept": "accept_item", "comment": "add_comment", "reject": "reject_item"}[m.PendingAction]
-					extra := map[string]any{}
-					if m.PendingAction == "comment" {
-						extra["body"] = m.Input
-					}
-					if m.PendingAction == "reject" {
-						extra["rationale"] = m.Input
-					}
-					if m.PendingAction == "edit-preview" {
-						m.Modal = "preview-loading"
-						return m, m.Executor.Execute("preview_edit", itemID, map[string]any{"statement": m.Input})
-					}
-					if m.PendingAction == "edit-confirm" {
-						m.Modal = "submitting"
-						return m, m.Executor.Execute("edit_item", itemID, map[string]any{"statement": m.After, "preview_token": m.PreviewToken})
-					}
-					if m.PendingAction == "approval-confirm" {
-						if m.Input != m.Challenge {
-							m.Status = "challenge mismatch"
-							break
-						}
-						m.Modal = "submitting"
-						return m, m.Executor.Execute("approve_intent", "", map[string]any{"interactive_tty": true, "confirmation_token": m.ApprovalToken, "challenge_response": m.Input})
-					}
-					if operation != "" && (m.PendingAction == "accept" || m.Input != "") {
-						m.Modal, m.PendingAction = "", ""
-						return m, m.Executor.Execute(operation, itemID, extra)
-					}
-				}
-				m.Status = m.PendingAction + " confirmed for " + itemID
-				m.Modal, m.PendingAction = "", ""
-			}
-		case "backspace":
-			if m.Modal != "" && len(m.Input) > 0 {
-				m.Input = m.Input[:len(m.Input)-1]
-			}
-		case "esc":
-			m.Modal, m.PendingAction, m.Input, m.PreviewToken, m.ApprovalToken = "", "", "", "", ""
-		default:
-			if m.Modal != "" && msg.Text != "" {
-				m.Input += msg.Text
-			}
+		}
+	case tea.PasteMsg:
+		if reviewAcceptsText(m) {
+			m.Input += msg.Content
 		}
 	case ActionResultMsg:
 		if msg.Err != nil {
@@ -330,6 +285,90 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Width, m.Height = msg.Width, msg.Height
 	}
 	return m, nil
+}
+
+// updateModalKey gives text entry exclusive ownership of keyboard input. While
+// a modal is open, letters that are normally commands are inserted as text and
+// can never trigger review mutations or navigation.
+func (m Model) updateModalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		m.Quitting = true
+		return m, tea.Quit
+	case "esc":
+		m.Modal, m.PendingAction, m.Input, m.PreviewToken, m.ApprovalToken = "", "", "", "", ""
+		return m, nil
+	case "backspace":
+		if reviewAcceptsText(m) {
+			runes := []rune(m.Input)
+			if len(runes) > 0 {
+				m.Input = string(runes[:len(runes)-1])
+			}
+		}
+		return m, nil
+	case "enter":
+		return m.confirmPending()
+	default:
+		if reviewAcceptsText(m) && msg.Text != "" {
+			m.Input += msg.Text
+		}
+		return m, nil
+	}
+}
+
+func (m Model) confirmPending() (tea.Model, tea.Cmd) {
+	if m.Modal == "preview-loading" || m.Modal == "approval-loading" || m.Modal == "submitting" {
+		return m, nil
+	}
+	if m.Executor == nil {
+		m.Status = "review operation is unavailable"
+		return m, nil
+	}
+	itemID := ""
+	if len(m.Items) > 0 && m.Selected >= 0 && m.Selected < len(m.Items) {
+		itemID = m.Items[m.Selected].ID
+	}
+	m.Status = m.PendingAction + " requested for " + shortRef(itemID)
+	switch m.PendingAction {
+	case "accept":
+		m.Modal, m.PendingAction = "", ""
+		return m, m.Executor.Execute("accept_item", itemID, nil)
+	case "comment":
+		if strings.TrimSpace(m.Input) == "" {
+			m.Status = "comment text is required"
+			return m, nil
+		}
+		body := m.Input
+		m.Modal, m.PendingAction, m.Input = "", "", ""
+		return m, m.Executor.Execute("add_comment", itemID, map[string]any{"body": body})
+	case "reject":
+		if strings.TrimSpace(m.Input) == "" {
+			m.Status = "rejection reason is required"
+			return m, nil
+		}
+		rationale := m.Input
+		m.Modal, m.PendingAction, m.Input = "", "", ""
+		return m, m.Executor.Execute("reject_item", itemID, map[string]any{"rationale": rationale})
+	case "edit-preview":
+		if strings.TrimSpace(m.Input) == "" {
+			m.Status = "edited statement is required"
+			return m, nil
+		}
+		m.Modal = "preview-loading"
+		return m, m.Executor.Execute("preview_edit", itemID, map[string]any{"statement": m.Input})
+	case "edit-confirm":
+		m.Modal = "submitting"
+		return m, m.Executor.Execute("edit_item", itemID, map[string]any{"statement": m.After, "preview_token": m.PreviewToken})
+	case "approval-confirm":
+		if m.Input != m.Challenge {
+			m.Status = "challenge mismatch"
+			return m, nil
+		}
+		m.Modal = "submitting"
+		return m, m.Executor.Execute("approve_intent", "", map[string]any{"interactive_tty": true, "confirmation_token": m.ApprovalToken, "challenge_response": m.Input})
+	default:
+		return m, nil
+	}
 }
 
 func (m Model) View() tea.View {

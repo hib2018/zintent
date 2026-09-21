@@ -25,23 +25,28 @@ func renderView(m Model) tea.View {
 		} else {
 			list.WriteString("  ")
 		}
-		list.WriteString(item.ID + " [" + item.Status + "] " + item.Statement + "\n")
+		list.WriteString("[" + fallback(item.Status, "unreviewed") + "] " + item.Kind + "\n")
+		list.WriteString("  " + item.Statement + "\n")
 	}
 
 	if len(m.Items) > 0 {
 		selected := m.Items[m.Selected]
-		detail.WriteString(selected.ID + " / " + selected.Kind + "\n\n" + selected.Statement + "\n")
+		detail.WriteString("ITEM\n")
+		detail.WriteString("  ID         : " + shortRef(selected.ID) + "\n")
+		detail.WriteString("  Kind       : " + selected.Kind + "\n")
+		detail.WriteString("  Status     : " + fallback(selected.Status, "unreviewed") + "\n\n")
+		detail.WriteString("STATEMENT\n  " + selected.Statement + "\n")
 		if selected.Provenance != "" {
-			detail.WriteString("provenance: " + selected.Provenance + "\n")
+			detail.WriteString("\nPROVENANCE\n  " + selected.Provenance + "\n")
 		}
 		if selected.Rationale != "" {
-			detail.WriteString("rationale: " + selected.Rationale + "\n")
+			detail.WriteString("\nRATIONALE\n  " + selected.Rationale + "\n")
 		}
 	}
 	width := max(40, m.Width)
 	height := max(12, m.Height-7)
 	var b strings.Builder
-	header := "zintent  " + m.Lifecycle + "  rev:" + m.Revision + "  actor:" + m.Actor
+	header := "REVIEW  lifecycle:" + m.Lifecycle + "  revision:" + shortRef(m.Revision) + "  actor:" + fallback(m.Actor, "-")
 	b.WriteString(strings.Join(renderPane("Review", header, width, 3, false), "\n"))
 	b.WriteByte('\n')
 	if width < 72 {
@@ -57,7 +62,7 @@ func renderView(m Model) tea.View {
 		b.WriteString("\nConfirm ")
 		b.WriteString(m.Modal)
 		b.WriteString(" for ")
-		b.WriteString(m.Items[m.Selected].ID)
+		b.WriteString(shortRef(m.Items[m.Selected].ID))
 		b.WriteString("? Enter=confirm Esc=cancel\n")
 		if m.PendingAction == "edit-confirm" {
 			b.WriteString("before: ")
@@ -108,4 +113,12 @@ func renderView(m Model) tea.View {
 	}
 	b.WriteString("\n↑/↓ j/k navigate  a accept  e edit  c comment  x reject  f complete  p approve  q quit\n")
 	return tea.NewView(b.String())
+}
+
+func shortRef(value string) string {
+	const head, tail = 10, 6
+	if len(value) <= head+tail+1 {
+		return value
+	}
+	return value[:head] + "…" + value[len(value)-tail:]
 }

@@ -202,6 +202,10 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.Width, m.Height = msg.Width, msg.Height
 		m.ReviewFlow.Width, m.ReviewFlow.Height = msg.Width, msg.Height
+	case tea.PasteMsg:
+		if m.Screen() == ScreenReview && m.IntentPath != "" {
+			return m.updateReview(msg)
+		}
 	case ActionResultMsg:
 		return m.updateReview(msg)
 	case ReloadResultMsg:
@@ -357,7 +361,7 @@ func (m WorkspaceModel) View() tea.View {
 	if height < 18 {
 		height = 24
 	}
-	header := fmt.Sprintf("zintent workspace  %s  intent:%s  rev:%s", m.Screen(), fallback(m.IntentID, "-"), fallback(m.Revision, "-"))
+	header := fmt.Sprintf("ZINTENT WORKSPACE  %-10s  intent:%-19s  revision:%s", strings.ToUpper(m.Screen().String()), shortRef(fallback(m.IntentID, "-")), shortRef(fallback(m.Revision, "-")))
 	intents := m.IntentList.View()
 	main := m.screenBody()
 	bodyHeight := max(8, height-13)
@@ -456,13 +460,14 @@ func (m WorkspaceModel) screenBody() string {
 
 func workspaceReviewBody(flow Model, width, height int) string {
 	var prefix strings.Builder
-	fmt.Fprintf(&prefix, "Lifecycle: %s  Revision: %s\n", fallback(flow.Lifecycle, "-"), fallback(flow.Revision, "-"))
+	prefix.WriteString("REVIEW\n")
+	fmt.Fprintf(&prefix, "  Lifecycle : %s\n  Revision  : %s\n", fallback(flow.Lifecycle, "-"), shortRef(fallback(flow.Revision, "-")))
 	if flow.Modal != "" {
 		itemID := "-"
 		if len(flow.Items) > 0 && flow.Selected >= 0 && flow.Selected < len(flow.Items) {
 			itemID = flow.Items[flow.Selected].ID
 		}
-		fmt.Fprintf(&prefix, "ACTION: %s for %s  Enter=confirm Esc=cancel\n", flow.Modal, itemID)
+		fmt.Fprintf(&prefix, "\nACTION\n  Type   : %s\n  Item   : %s\n  Keys   : Enter=confirm  Esc=cancel\n", flow.Modal, shortRef(itemID))
 		switch flow.PendingAction {
 		case "edit-preview":
 			prefix.WriteString("New statement: " + flow.Input + "\n")
@@ -486,16 +491,19 @@ func workspaceReviewBody(flow Model, width, height int) string {
 		if i == flow.Selected {
 			marker = "→ "
 		}
-		fmt.Fprintf(&list, "%s%s [%s] %s\n", marker, item.ID, item.Status, item.Statement)
+		fmt.Fprintf(&list, "%s[%s] %s\n", marker, fallback(item.Status, "unreviewed"), item.Kind)
+		fmt.Fprintf(&list, "  %s\n", item.Statement)
 	}
 	if len(flow.Items) > 0 && flow.Selected >= 0 && flow.Selected < len(flow.Items) {
 		selected := flow.Items[flow.Selected]
-		fmt.Fprintf(&detail, "%s / %s\n\n%s\n", selected.ID, selected.Kind, selected.Statement)
+		detail.WriteString("ITEM\n")
+		fmt.Fprintf(&detail, "  ID         : %s\n  Kind       : %s\n  Status     : %s\n", shortRef(selected.ID), selected.Kind, fallback(selected.Status, "unreviewed"))
+		detail.WriteString("\nSTATEMENT\n  " + selected.Statement + "\n")
 		if selected.Provenance != "" {
-			detail.WriteString("provenance: " + selected.Provenance + "\n")
+			detail.WriteString("\nPROVENANCE\n  " + selected.Provenance + "\n")
 		}
 		if selected.Rationale != "" {
-			detail.WriteString("rationale: " + selected.Rationale + "\n")
+			detail.WriteString("\nRATIONALE\n  " + selected.Rationale + "\n")
 		}
 	}
 
@@ -528,10 +536,11 @@ func (m WorkspaceModel) intentDetail() string {
 		return "No Intent selected.\n\nSelect an Intent on the left or press n to import a Draft."
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "Intent: %s\n", selected.ID)
-	fmt.Fprintf(&b, "Lifecycle: %s\nRevision: %s\nBlockers: %d\n", fallback(selected.Lifecycle, "-"), fallback(selected.Revision, "-"), selected.BlockerCount)
+	b.WriteString("INTENT\n")
+	fmt.Fprintf(&b, "  ID        : %s\n", shortRef(selected.ID))
+	fmt.Fprintf(&b, "  Lifecycle : %s\n  Revision  : %s\n  Blockers  : %d\n", fallback(selected.Lifecycle, "-"), shortRef(fallback(selected.Revision, "-")), selected.BlockerCount)
 	if selected.DisplayName != "" {
-		fmt.Fprintf(&b, "Name: %s\n", selected.DisplayName)
+		fmt.Fprintf(&b, "\nTITLE\n  %s\n", selected.DisplayName)
 	}
 	if selected.Corrupt {
 		fmt.Fprintf(&b, "CORRUPT: %s\n", selected.Finding)

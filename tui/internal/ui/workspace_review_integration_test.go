@@ -35,7 +35,7 @@ func TestWorkspaceReviewRendersCanonicalItemsAndMovesSelection(t *testing.T) {
 	m = next.(WorkspaceModel)
 
 	view := m.View().Content
-	for _, expected := range []string{"First statement", "Second", "item-1 / goal"} {
+	for _, expected := range []string{"First statement", "Second", "Kind       : goal"} {
 		if !strings.Contains(view, expected) {
 			t.Fatalf("workspace review missing %q in:\n%s", expected, view)
 		}
@@ -46,7 +46,7 @@ func TestWorkspaceReviewRendersCanonicalItemsAndMovesSelection(t *testing.T) {
 	if m.ReviewFlow.Selected != 1 || m.Review.SelectedID != "item-2" {
 		t.Fatalf("selection not synchronized: flow=%d screen=%q", m.ReviewFlow.Selected, m.Review.SelectedID)
 	}
-	if view = m.View().Content; !strings.Contains(view, "item-2 / constraint") {
+	if view = m.View().Content; !strings.Contains(view, "Kind       : constraint") {
 		t.Fatalf("selected item detail not rendered:\n%s", view)
 	}
 }
@@ -67,13 +67,21 @@ func TestWorkspaceReviewShowsCommentInputWithoutClipping(t *testing.T) {
 	next, _ = m.Update(workspaceKey("c"))
 	m = next.(WorkspaceModel)
 	view := m.View()
-	for _, expected := range []string{"ACTION: comment", "Comment:"} {
+	for _, expected := range []string{"ACTION", "Type   : comment", "Comment:"} {
 		if !strings.Contains(view.Content, expected) {
 			t.Fatalf("comment input missing %q in:\n%s", expected, view.Content)
 		}
 	}
 	if view.Cursor == nil {
 		t.Fatal("comment input must expose a cursor")
+	}
+
+	next, _ = m.Update(tea.KeyPressMsg(tea.Key{Text: "日本語", Code: '?'}))
+	m = next.(WorkspaceModel)
+	next, _ = m.Update(tea.PasteMsg{Content: "コメント"})
+	m = next.(WorkspaceModel)
+	if view = m.View(); !strings.Contains(view.Content, "日本語コメント") {
+		t.Fatalf("Japanese input was not preserved:\n%s", view.Content)
 	}
 }
 
