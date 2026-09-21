@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -34,12 +35,16 @@ type WorkspaceModel struct {
 	Review                     ReviewScreen
 	ReviewFlow                 Model
 	Comments                   CommentsScreen
+	CommentAction              string
+	CommentInput               string
 	Completion                 CompletionScreen
 	Approval                   ApprovalModel
 	Snapshot                   SnapshotScreen
 	History                    HistoryScreen
 	Validation                 ValidationScreen
 	Recovery                   RecoveryScreen
+	RecoverySelected           int
+	RecoveryConfirm            bool
 	IntentList                 IntentListScreen
 	Import                     ImportModal
 	Drafts                     DraftPicker
@@ -51,6 +56,16 @@ type WorkspaceModel struct {
 		ImportDraft(ImportModal) tea.Cmd
 		OpenIntent(string) tea.Cmd
 	}
+}
+
+type workspaceDataExecutor interface {
+	LoadHistory(string) tea.Cmd
+	LoadRevision(string, string) tea.Cmd
+	LoadDiff(string, string, string) tea.Cmd
+	LoadValidation(string) tea.Cmd
+	LoadSnapshot(string, string) tea.Cmd
+	LoadRecovery(string) tea.Cmd
+	CleanupRecovery(string, RecoveryScreen) tea.Cmd
 }
 
 type WorkspaceCanonicalMsg struct {
@@ -94,6 +109,18 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			return m, nil
+		}
+		if m.Screen() == ScreenComments && m.IntentPath != "" && m.Import.Phase == ModalClosed {
+			return m.updateCommentsKey(msg)
+		}
+		if m.Screen() == ScreenCompletion && m.IntentPath != "" && m.Import.Phase == ModalClosed {
+			return m.updateCompletionKey(msg)
+		}
+		if m.Screen() == ScreenHistory && m.IntentPath != "" && m.Import.Phase == ModalClosed {
+			return m.updateHistoryKey(msg)
+		}
+		if m.Screen() == ScreenRecovery && m.IntentPath != "" && m.Import.Phase == ModalClosed {
+			return m.updateRecoveryKey(msg)
 		}
 		if m.Screen() == ScreenReview && m.IntentPath != "" && m.Import.Phase == ModalClosed {
 			if key == "esc" && m.ReviewFlow.Modal == "" {
@@ -187,6 +214,7 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "c":
 			m.nav.push(ScreenComments)
 		case "f":
+			m.updateCompletionState()
 			m.nav.push(ScreenCompletion)
 		case "p":
 			if m.IntentPath != "" {
@@ -196,12 +224,32 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.nav.push(ScreenApproval)
 		case "h":
 			m.nav.push(ScreenHistory)
+			m.Status = "loading verified revision history"
+			if executor, ok := m.WorkspaceExecutor.(workspaceDataExecutor); ok && m.IntentPath != "" {
+				return m, executor.LoadHistory(m.IntentPath)
+			}
 		case "v":
 			m.nav.push(ScreenValidation)
+			m.Status = "validating canonical Intent"
+			if executor, ok := m.WorkspaceExecutor.(workspaceDataExecutor); ok && m.IntentPath != "" {
+				return m, executor.LoadValidation(m.IntentPath)
+			}
 		case "s":
 			m.nav.push(ScreenSnapshot)
+			snapshotID := m.ReviewFlow.SnapshotPath
+			if selected := m.IntentList.Selected(); snapshotID == "" && selected != nil {
+				snapshotID = selected.SnapshotID
+			}
+			m.Status = "loading verified snapshot"
+			if executor, ok := m.WorkspaceExecutor.(workspaceDataExecutor); ok && m.IntentPath != "" {
+				return m, executor.LoadSnapshot(m.IntentPath, snapshotID)
+			}
 		case "R":
 			m.nav.push(ScreenRecovery)
+			m.Status = "loading recovery status"
+			if executor, ok := m.WorkspaceExecutor.(workspaceDataExecutor); ok && m.IntentPath != "" {
+				return m, executor.LoadRecovery(m.IntentPath)
+			}
 		}
 	case tea.WindowSizeMsg:
 		m.Width, m.Height = msg.Width, msg.Height
@@ -211,9 +259,82 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateReview(msg)
 		}
 	case ActionResultMsg:
+		if !msg.Response.OK && msg.Response.Error != nil && msg.Response.Error.Code == "stale_revision" && m.WorkspaceExecutor != nil && m.IntentPath != "" {
+			m.ReviewFlow.Modal, m.ReviewFlow.PendingAction, m.ReviewFlow.Input = "", "", ""
+			m.ReviewFlow.PreviewToken, m.ReviewFlow.ApprovalToken = "", ""
+			m.CommentAction, m.CommentInput = "", ""
+			m.Status = "stale revision detected; reloading canonical Intent"
+			return m, m.WorkspaceExecutor.OpenIntent(filepath.Base(m.IntentPath))
+		}
 		return m.updateReview(msg)
 	case ReloadResultMsg:
 		return m.updateReview(msg)
+	case HistoryLoadedMsg:
+		if msg.Err != nil {
+			m.Status = "history load failed: " + msg.Err.Error()
+		} else {
+			m.History = msg.History
+			m.Status = fmt.Sprintf("loaded %d reachable revisions", len(msg.History.Revisions))
+		}
+	case RevisionLoadedMsg:
+		if msg.Err != nil {
+			m.Status = "revision inspection failed: " + msg.Err.Error()
+		} else {
+			m.History.Inspected = &msg.Revision
+			m.Status = "verified selected revision"
+		}
+	case DiffLoadedMsg:
+		if msg.Err != nil {
+			m.Status = "diff load failed: " + msg.Err.Error()
+		} else {
+			m.History.BaseID, m.History.TargetID, m.History.Changes = msg.BaseID, msg.TargetID, msg.Changes
+			m.nav.push(ScreenDiff)
+			m.Status = fmt.Sprintf("loaded %d item changes", len(msg.Changes))
+		}
+	case ValidationLoadedMsg:
+		if msg.Err != nil {
+			m.Status = "validation failed: " + msg.Err.Error()
+		} else {
+			m.Validation = ValidationScreen{Findings: msg.Findings}
+			if len(msg.Findings) == 0 {
+				m.Status = "canonical Intent is valid"
+			} else {
+				m.Status = fmt.Sprintf("validation returned %d findings", len(msg.Findings))
+			}
+		}
+	case SnapshotLoadedMsg:
+		if msg.Err != nil {
+			m.Status = "snapshot load failed: " + msg.Err.Error()
+		} else {
+			m.Snapshot = msg.Snapshot
+			m.Status = "approved snapshot verified"
+		}
+	case RecoveryLoadedMsg:
+		if msg.Err != nil {
+			m.Status = "recovery load failed: " + msg.Err.Error()
+		} else {
+			m.Recovery = msg.Recovery
+			m.RecoverySelected, m.Recovery.Cursor, m.RecoveryConfirm = 0, 0, false
+			m.Status = fmt.Sprintf("loaded %d temporary candidates", len(msg.Recovery.Temporary))
+		}
+	case RecoveryCleanupMsg:
+		if msg.Err != nil {
+			m.Status = "recovery cleanup failed: " + msg.Err.Error()
+			m.Recovery.Invalidate(msg.Err.Error())
+			m.RecoveryConfirm = false
+			if (msg.Code == "recovery_observation_stale" || msg.Code == "cleanup_target_changed") && m.IntentPath != "" {
+				if executor, ok := m.WorkspaceExecutor.(workspaceDataExecutor); ok {
+					m.Status += "; reloading canonical recovery status"
+					return m, executor.LoadRecovery(m.IntentPath)
+				}
+			}
+		} else {
+			m.Status = fmt.Sprintf("removed %d temporary candidates", msg.Removed)
+			m.RecoveryConfirm = false
+			if executor, ok := m.WorkspaceExecutor.(workspaceDataExecutor); ok {
+				return m, executor.LoadRecovery(m.IntentPath)
+			}
+		}
 	case WorkspaceCanonicalMsg:
 		if msg.Err != nil {
 			m.Status = "canonical reload failed: " + msg.Err.Error()
@@ -229,6 +350,7 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		flow := New(msg.Items)
 		flow.IntentID, flow.Revision, flow.ExpectedRevision = msg.IntentID, msg.RevisionID, msg.RevisionID
 		flow.Lifecycle, flow.IntentPath = msg.Lifecycle, msg.IntentPath
+		flow.Comments = append([]CommentRecord(nil), msg.Comments...)
 		flow.Width, flow.Height = m.Width, m.Height
 		if factory, ok := m.WorkspaceExecutor.(interface {
 			ReviewCommands(string, string) *CoreCommands
@@ -240,7 +362,7 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.ReviewFlow = flow
 		m.Comments = m.Comments.Reload(msg.Comments)
-		m.Completion.RevisionID = m.Revision
+		m.updateCompletionState()
 		if m.Screen() == ScreenIntentList {
 			m.nav.push(ScreenDashboard)
 		}
@@ -306,6 +428,190 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // updateReview delegates review input and asynchronous command results to the
 // same model used by `zintent review`, then mirrors canonical fields needed by
 // the surrounding workspace. Domain transitions remain owned by the core.
+func (m WorkspaceModel) updateCommentsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+	if m.CommentAction != "" {
+		switch key {
+		case "ctrl+c":
+			m.Quitting = true
+			return m, tea.Quit
+		case "esc":
+			m.CommentAction, m.CommentInput = "", ""
+		case "backspace":
+			runes := []rune(m.CommentInput)
+			if len(runes) > 0 {
+				m.CommentInput = string(runes[:len(runes)-1])
+			}
+		case "enter":
+			if !ValidateClosureReason(m.CommentInput) {
+				m.Status = "comment closure reason is required"
+				return m, nil
+			}
+			selected := m.Comments.Selected()
+			commands, ok := m.ReviewFlow.Executor.(interface {
+				ExecuteComment(string, string, string) tea.Cmd
+			})
+			if !ok || selected == nil {
+				m.Status = "comment operation is unavailable"
+				return m, nil
+			}
+			operation, reason := m.CommentAction+"_comment", m.CommentInput
+			m.CommentAction, m.CommentInput = "", ""
+			m.ReviewFlow.Modal, m.ReviewFlow.PendingAction = "submitting", operation
+			return m, commands.ExecuteComment(operation, selected.ID, reason)
+		default:
+			if msg.Text != "" {
+				m.CommentInput += msg.Text
+			}
+		}
+		return m, nil
+	}
+	switch key {
+	case "esc":
+		m.nav.back()
+	case "j", "down":
+		m.Comments = m.Comments.Move(1)
+	case "k", "up":
+		m.Comments = m.Comments.Move(-1)
+	case "r", "w":
+		selected := m.Comments.Selected()
+		if selected == nil || selected.Status != "open" {
+			m.Status = "select an open comment first"
+			return m, nil
+		}
+		if key == "r" {
+			m.CommentAction = "resolve"
+		} else {
+			m.CommentAction = "withdraw"
+		}
+		m.CommentInput = ""
+	}
+	return m, nil
+}
+
+func (m WorkspaceModel) updateCompletionKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.nav.back()
+	case "j", "down":
+		if m.Completion.Selected+1 < len(m.Completion.Blockers) {
+			m.Completion.Selected++
+		}
+	case "k", "up":
+		if m.Completion.Selected > 0 {
+			m.Completion.Selected--
+		}
+	case "enter":
+		if !m.Completion.Eligible() {
+			if m.Completion.Selected >= 0 && m.Completion.Selected < len(m.Completion.Blockers) {
+				blocker := m.Completion.Blockers[m.Completion.Selected]
+				if id, found := strings.CutPrefix(blocker, "unreviewed item: "); found {
+					for index := range m.ReviewFlow.Items {
+						if m.ReviewFlow.Items[index].ID == id {
+							m.ReviewFlow.Selected = index
+							m.Review.SelectedID = id
+							m.nav.push(ScreenReview)
+							return m, nil
+						}
+					}
+				}
+				if id, found := strings.CutPrefix(blocker, "open comment: "); found {
+					m.Comments.SelectedID = id
+					m.nav.push(ScreenComments)
+					return m, nil
+				}
+			}
+			m.Status = "review completion is blocked"
+			return m, nil
+		}
+		m.nav.push(ScreenReview)
+		return m.updateReview(tea.KeyPressMsg(tea.Key{Text: "f", Code: 'f'}))
+	}
+	return m, nil
+}
+
+func (m WorkspaceModel) updateHistoryKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.nav.back()
+	case "j", "down":
+		m.History.Move(1)
+	case "k", "up":
+		m.History.Move(-1)
+	case "enter":
+		target := m.History.SelectedRevisionRecord()
+		if target != nil {
+			if executor, ok := m.WorkspaceExecutor.(workspaceDataExecutor); ok {
+				m.Status = "verifying selected revision"
+				return m, executor.LoadRevision(m.IntentPath, target.ID)
+			}
+		}
+	case "d":
+		target := m.History.SelectedRevisionRecord()
+		if target == nil || target.ParentID == "" {
+			m.Status = "select a revision with a parent to compare"
+			return m, nil
+		}
+		if executor, ok := m.WorkspaceExecutor.(workspaceDataExecutor); ok {
+			m.Status = "loading revision diff"
+			return m, executor.LoadDiff(m.IntentPath, target.ParentID, target.ID)
+		}
+	}
+	return m, nil
+}
+
+func (m WorkspaceModel) updateRecoveryKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+	if m.RecoveryConfirm {
+		switch key {
+		case "esc":
+			m.RecoveryConfirm = false
+		case "enter":
+			if executor, ok := m.WorkspaceExecutor.(workspaceDataExecutor); ok && m.Recovery.CanCleanup(time.Now()) {
+				m.RecoveryConfirm = false
+				m.Status = "cleaning selected temporary candidates"
+				return m, executor.CleanupRecovery(m.IntentPath, m.Recovery)
+			}
+		}
+		return m, nil
+	}
+	switch key {
+	case "esc":
+		m.nav.back()
+	case "j", "down":
+		if m.RecoverySelected+1 < len(m.Recovery.Temporary) {
+			m.RecoverySelected++
+			m.Recovery.Cursor = m.RecoverySelected
+		}
+	case "k", "up":
+		if m.RecoverySelected > 0 {
+			m.RecoverySelected--
+			m.Recovery.Cursor = m.RecoverySelected
+		}
+	case " ", "space":
+		if m.RecoverySelected >= 0 && m.RecoverySelected < len(m.Recovery.Temporary) && !m.Recovery.Temporary[m.RecoverySelected].Protected {
+			m.Recovery.Temporary[m.RecoverySelected].Selected = !m.Recovery.Temporary[m.RecoverySelected].Selected
+		}
+	case "x":
+		if m.Recovery.CanCleanup(time.Now()) {
+			m.RecoveryConfirm = true
+		} else {
+			m.Status = "select at least one current temporary candidate"
+		}
+	}
+	return m, nil
+}
+
+func (m *WorkspaceModel) updateCompletionState() {
+	blockers := m.ReviewFlow.ResumeBlockers()
+	m.Completion.RevisionID = m.Revision
+	m.Completion.Lifecycle = m.Lifecycle
+	m.Completion.Blockers = blockers
+	if m.Completion.Selected >= len(blockers) {
+		m.Completion.Selected = max(0, len(blockers)-1)
+	}
+}
+
 func (m WorkspaceModel) updateReview(msg tea.Msg) (tea.Model, tea.Cmd) {
 	next, cmd := m.ReviewFlow.Update(msg)
 	flow, ok := next.(Model)
@@ -321,13 +627,17 @@ func (m WorkspaceModel) updateReview(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.IntentList.Entries[index].ID == m.IntentID {
 			m.IntentList.Entries[index].Revision = m.Revision
 			m.IntentList.Entries[index].Lifecycle = m.Lifecycle
+			if flow.SnapshotPath != "" {
+				m.IntentList.Entries[index].SnapshotID = flow.SnapshotPath
+			}
 		}
 	}
 	m.Review = m.Review.Reload(flow.Items)
+	m.Comments = m.Comments.Reload(flow.Comments)
 	if len(flow.Items) > 0 && flow.Selected >= 0 && flow.Selected < len(flow.Items) {
 		m.Review.SelectedID = flow.Items[flow.Selected].ID
 	}
-	m.Completion.RevisionID = m.Revision
+	m.updateCompletionState()
 	return m, cmd
 }
 
@@ -415,7 +725,7 @@ func (m WorkspaceModel) View() tea.View {
 	b.WriteString("\nenter open  esc back  q quit\n")
 	v := tea.NewView(b.String())
 	v.AltScreen = true
-	if m.IntentList.FilterEditing || m.Screen() == ScreenReview && reviewAcceptsText(m.ReviewFlow) {
+	if m.IntentList.FilterEditing || m.Screen() == ScreenReview && reviewAcceptsText(m.ReviewFlow) || m.Screen() == ScreenComments && m.CommentAction != "" {
 		v.Cursor = tea.NewCursor(0, 0)
 	}
 	return v
@@ -444,6 +754,14 @@ func (m WorkspaceModel) navigationBar() string {
 
 func (m WorkspaceModel) screenBody() string {
 	switch m.Screen() {
+	case ScreenComments:
+		body := m.Comments.View()
+		if m.CommentAction != "" {
+			body += "\n\nCOMMENT CLOSURE\n  Action : " + m.CommentAction + "\n  Reason : " + m.CommentInput + "\n  Keys   : Enter=confirm  Esc=cancel"
+		}
+		return body
+	case ScreenCompletion:
+		return m.Completion.View()
 	case ScreenHistory, ScreenDiff:
 		return m.History.View()
 	case ScreenValidation:
@@ -451,7 +769,11 @@ func (m WorkspaceModel) screenBody() string {
 	case ScreenSnapshot:
 		return m.Snapshot.View()
 	case ScreenRecovery:
-		return m.Recovery.View()
+		body := m.Recovery.View()
+		if m.RecoveryConfirm {
+			body += "\nCLEANUP CONFIRMATION\n  Only selected unchanged temporary files will be removed.\n  Enter=confirm  Esc=cancel"
+		}
+		return body
 	case ScreenIntentList:
 		return m.intentDetail()
 	case ScreenReview:

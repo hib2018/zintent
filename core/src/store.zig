@@ -67,7 +67,7 @@ pub fn loadRevisionChain(allocator: std.mem.Allocator, io: std.Io, intent_dir: [
     var current = try std.json.parseFromSlice(std.json.Value, allocator, verified.bytes, .{ .allocate = .alloc_always });
     defer current.deinit();
     var chain = std.json.Array.init(allocator);
-    var revision_id = stringValue(current.value, "revision_id") orelse return error.InvalidRevision;
+    var revision_id: []const u8 = try allocator.dupe(u8, stringValue(current.value, "revision_id") orelse return error.InvalidRevision);
     while (revision_id.len > 0) {
         const revision_path = try std.fmt.allocPrint(allocator, "{s}/revisions/{s}.json", .{ intent_dir, revision_id });
         defer allocator.free(revision_path);
@@ -81,17 +81,37 @@ pub fn loadRevisionChain(allocator: std.mem.Allocator, io: std.Io, intent_dir: [
             else => return error.InvalidRevision,
         };
         if (stringValue(.{ .object = object }, "revision_id")) |stored_id| if (!std.mem.eql(u8, stored_id, revision_id)) return error.IntegrityFailure;
-        // revision_hash is domain metadata and may describe the pre-publication
-        // canonical payload. File-byte integrity for HEAD is enforced by HEAD;
-        // historical entries are bound by their stable filename/embedded ID.
+        // Summary strings must outlive the parsed revision document because the
+        // resulting array is serialized after traversal completes.
         var entry = try std.json.ObjectMap.init(allocator, &.{}, &.{});
-        try entry.put(allocator, "revision_id", .{ .string = revision_id });
-        if (object.get("parent_revision_id")) |parent| try entry.put(allocator, "parent_revision_id", parent);
-        try entry.put(allocator, "revision_hash", .{ .string = &digest });
+        try entry.put(allocator, "revision_id", .{ .string = try allocator.dupe(u8, revision_id) });
+        var next_revision_id: ?[]const u8 = null;
+        if (object.get("parent_revision_id")) |parent| {
+            if (parent == .string) {
+                const stable_parent = try allocator.dupe(u8, parent.string);
+                try entry.put(allocator, "parent_revision_id", .{ .string = stable_parent });
+                next_revision_id = stable_parent;
+            } else if (parent == .null) {
+                try entry.put(allocator, "parent_revision_id", .null);
+            } else return error.InvalidRevision;
+        }
+        try entry.put(allocator, "revision_hash", .{ .string = try allocator.dupe(u8, &digest) });
+        if (stringValue(.{ .object = object }, "created_at")) |created| try entry.put(allocator, "created_at", .{ .string = try allocator.dupe(u8, created) });
+        if (object.get("operation")) |operation_value| switch (operation_value) {
+            .object => |operation| if (stringValue(.{ .object = operation }, "type")) |operation_type| try entry.put(allocator, "operation_type", .{ .string = try allocator.dupe(u8, operation_type) }),
+            else => {},
+        };
+        if (object.get("actor")) |actor_value| switch (actor_value) {
+            .object => |actor| if (stringValue(.{ .object = actor }, "actor_id")) |actor_id| try entry.put(allocator, "actor_id", .{ .string = try allocator.dupe(u8, actor_id) }),
+            else => {},
+        };
+        if (object.get("revision_payload")) |payload_value| switch (payload_value) {
+            .object => |payload| if (stringValue(.{ .object = payload }, "lifecycle_state")) |lifecycle| try entry.put(allocator, "lifecycle_state", .{ .string = try allocator.dupe(u8, lifecycle) }),
+            else => {},
+        };
+        try entry.put(allocator, "reachable", .{ .bool = true });
         try chain.append(.{ .object = entry });
-        const parent = object.get("parent_revision_id") orelse break;
-        if (parent == .null) break;
-        revision_id = if (parent == .string) parent.string else return error.InvalidRevision;
+        revision_id = next_revision_id orelse break;
     }
     return chain;
 }
@@ -133,7 +153,12 @@ pub fn findOrphans(allocator: std.mem.Allocator, io: std.Io, intent_dir: []const
                 if (std.mem.eql(u8, id, candidate)) reachable = true;
             }
         }
-        if (!reachable) try orphans.append(.{ .string = candidate });
+        if (!reachable) {
+            var orphan = try std.json.ObjectMap.init(allocator, &.{}, &.{});
+            try orphan.put(allocator, "revision_id", .{ .string = try allocator.dupe(u8, candidate) });
+            try orphan.put(allocator, "reachable", .{ .bool = false });
+            try orphans.append(.{ .object = orphan });
+        }
     }
     return orphans;
 }

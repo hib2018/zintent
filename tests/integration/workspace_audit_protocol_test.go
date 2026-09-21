@@ -23,6 +23,9 @@ func auditFixture(t *testing.T) (string, string, string) {
 	if err := os.WriteFile(filepath.Join(dir, "revisions", "r1.json"), revision, 0600); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(dir, "revisions", "orphan.json"), []byte(`{"revision_id":"orphan","parent_revision_id":null}`), 0600); err != nil {
+		t.Fatal(err)
+	}
 	hash := sha256.Sum256(revision)
 	headHash := hex.EncodeToString(hash[:])
 	head, _ := json.Marshal(map[string]any{"schema_version": "1.0.0", "intent_id": "intent-1", "current_revision_id": "r1", "current_revision_hash": headHash, "lifecycle_state": "draft"})
@@ -83,7 +86,19 @@ func TestWorkspaceAuditAndRecoveryProtocol(t *testing.T) {
 	if _, err := os.Stat(core); err != nil {
 		t.Skip("build core first")
 	}
-	auditCall(t, core, "list_revisions", map[string]any{"intent_path": dir})
+	history := auditCall(t, core, "list_revisions", map[string]any{"intent_path": dir})
+	reachable, ok := history["reachable"].([]any)
+	if !ok || len(reachable) != 1 {
+		t.Fatal(history)
+	}
+	summary, ok := reachable[0].(map[string]any)
+	if !ok || summary["revision_id"] != "r1" || summary["revision_hash"] != headHash || summary["reachable"] != true {
+		t.Fatalf("invalid stable revision summary: %#v", reachable[0])
+	}
+	orphans, ok := history["orphans"].([]any)
+	if !ok || len(orphans) != 1 || orphans[0].(map[string]any)["revision_id"] != "orphan" || orphans[0].(map[string]any)["reachable"] != false {
+		t.Fatalf("invalid orphan separation: %#v", history["orphans"])
+	}
 	auditCall(t, core, "inspect_revision", map[string]any{"intent_path": dir, "revision_id": "r1"})
 	snapshot := auditCall(t, core, "inspect_snapshot", map[string]any{"intent_path": dir, "snapshot_id": "snap"})
 	if snapshot["verified"] != true {
@@ -102,6 +117,47 @@ func TestWorkspaceAuditAndRecoveryProtocol(t *testing.T) {
 		t.Fatal("temporary survived cleanup")
 	}
 }
+func TestHistoricalDiffUsesRequestedTargetInsteadOfHead(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "revisions"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	revision := func(id string, parent any, statement string) []byte {
+		body, err := json.Marshal(map[string]any{
+			"revision_id": id, "parent_revision_id": parent,
+			"revision_payload": map[string]any{"intent_id": "intent-1", "lifecycle_state": "in_review", "items": []any{map[string]any{"item_id": "item-1", "statement": statement}}, "comments": []any{}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return body
+	}
+	for _, item := range []struct {
+		id, statement string
+		parent        any
+	}{{"r1", "old", nil}, {"r2", "middle", "r1"}, {"r3", "head", "r2"}} {
+		if err := os.WriteFile(filepath.Join(dir, "revisions", item.id+".json"), revision(item.id, item.parent, item.statement), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	headBytes, err := os.ReadFile(filepath.Join(dir, "revisions", "r3.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(headBytes)
+	head, _ := json.Marshal(map[string]any{"schema_version": "1.0.0", "intent_id": "intent-1", "current_revision_id": "r3", "current_revision_hash": hex.EncodeToString(digest[:]), "lifecycle_state": "in_review"})
+	if err := os.WriteFile(filepath.Join(dir, "HEAD.json"), head, 0600); err != nil {
+		t.Fatal(err)
+	}
+	root, _ := filepath.Abs(filepath.Join("..", ".."))
+	core := filepath.Join(root, "zig-out", "bin", "zintent-core")
+	data := auditCall(t, core, "diff_revisions", map[string]any{"intent_path": dir, "from_revision_id": "r1", "to_revision_id": "r2"})
+	changes, ok := data["changes"].([]any)
+	if !ok || len(changes) != 1 || changes[0].(map[string]any)["after"] != "middle" {
+		t.Fatalf("diff ignored requested historical target: %#v", data)
+	}
+}
+
 func TestAuditRejectsPathTraversal(t *testing.T) {
 	dir, _, core := auditFixture(t)
 	payload := map[string]any{"operation": "inspect_revision", "intent_path": dir, "revision_id": "../HEAD"}

@@ -16,8 +16,12 @@ type RecoveryCandidate struct {
 func (s RecoveryScreen) View() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Recovery status\nRevision: %s\nHEAD hash: %s\n", s.RevisionID, s.HeadHash)
-	for _, c := range s.Temporary {
-		fmt.Fprintf(&b, "[%t] %s %s %d bytes\n", c.Selected, c.ID, c.Kind, c.Size)
+	for index, c := range s.Temporary {
+		marker := "  "
+		if index == s.Cursor {
+			marker = "→ "
+		}
+		fmt.Fprintf(&b, "%s[%t] %s %s %d bytes\n", marker, c.Selected, c.ID, c.Kind, c.Size)
 	}
 	if len(s.Orphans) > 0 {
 		b.WriteString("Protected orphans\n")
@@ -28,6 +32,7 @@ func (s RecoveryScreen) View() string {
 	if s.Status != "" {
 		b.WriteString(s.Status + "\n")
 	}
+	b.WriteString("\nj/k select  Space toggle  x cleanup  Esc back\n")
 	return b.String()
 }
 
@@ -36,6 +41,7 @@ type RecoveryScreen struct {
 	ExpiresAt                   time.Time
 	Temporary, Orphans          []RecoveryCandidate
 	Status                      string
+	Cursor                      int
 }
 
 func (s RecoveryScreen) SelectedIDs() []string {

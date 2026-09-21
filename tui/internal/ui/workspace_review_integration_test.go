@@ -12,6 +12,7 @@ import (
 type recordingReviewExecutor struct {
 	operation string
 	itemID    string
+	reason    string
 	count     int
 }
 
@@ -19,6 +20,57 @@ func (e *recordingReviewExecutor) Execute(operation, itemID string, _ map[string
 	e.operation, e.itemID = operation, itemID
 	e.count++
 	return nil
+}
+
+func (e *recordingReviewExecutor) ExecuteComment(operation, commentID, reason string) tea.Cmd {
+	e.operation, e.itemID, e.reason = operation, commentID, reason
+	e.count++
+	return nil
+}
+
+func TestWorkspaceCommentsResolveThroughCoreExecutor(t *testing.T) {
+	executor := &recordingReviewExecutor{}
+	m := NewWorkspace()
+	m.IntentPath, m.Revision = "/tmp/intents/intent-1", "revision-1"
+	m.ReviewFlow.Executor = executor
+	m.Comments = CommentsScreen{Records: []CommentRecord{{ID: "comment-1", TargetItemID: "item-1", Body: "clarify", Status: "open"}}, SelectedID: "comment-1"}
+	m.nav.push(ScreenComments)
+
+	next, _ := m.Update(workspaceKey("r"))
+	m = next.(WorkspaceModel)
+	if m.CommentAction != "resolve" || m.View().Cursor == nil {
+		t.Fatal("resolve must open an exclusive closure-reason input")
+	}
+	next, _ = m.Update(tea.KeyPressMsg(tea.Key{Text: "対応済み", Code: '?'}))
+	m = next.(WorkspaceModel)
+	next, _ = m.Update(workspaceKey("enter"))
+	m = next.(WorkspaceModel)
+	if executor.operation != "resolve_comment" || executor.itemID != "comment-1" || executor.reason != "対応済み" || executor.count != 1 {
+		t.Fatalf("comment operation was not delegated: %#v", executor)
+	}
+}
+
+func TestWorkspaceCompletionNavigatesToSelectedBlocker(t *testing.T) {
+	m := NewWorkspace()
+	m.IntentPath, m.Revision = "/tmp/intents/intent-1", "revision-1"
+	m.ReviewFlow.Items = []Item{{ID: "item-1", Status: "unreviewed"}}
+	m.ReviewFlow.Comments = []CommentRecord{{ID: "comment-1", Status: "open"}}
+	m.Comments = CommentsScreen{Records: append([]CommentRecord(nil), m.ReviewFlow.Comments...)}
+	m.updateCompletionState()
+	m.nav.push(ScreenCompletion)
+
+	next, _ := m.Update(workspaceKey("enter"))
+	m = next.(WorkspaceModel)
+	if m.Screen() != ScreenReview || m.Review.SelectedID != "item-1" {
+		t.Fatalf("item blocker did not navigate to review: screen=%s item=%s", m.Screen(), m.Review.SelectedID)
+	}
+	m.nav.back()
+	m.Completion.Selected = 1
+	next, _ = m.Update(workspaceKey("enter"))
+	m = next.(WorkspaceModel)
+	if m.Screen() != ScreenComments || m.Comments.SelectedID != "comment-1" {
+		t.Fatalf("comment blocker did not navigate to comments: screen=%s comment=%s", m.Screen(), m.Comments.SelectedID)
+	}
 }
 
 func TestWorkspaceReviewRendersCanonicalItemsAndMovesSelection(t *testing.T) {

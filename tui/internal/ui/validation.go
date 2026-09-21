@@ -14,7 +14,11 @@ type ValidationScreen struct {
 
 func (s ValidationScreen) View() string {
 	var b strings.Builder
-	b.WriteString("Validation findings\n")
+	b.WriteString("VALIDATION\nValidation findings\n")
+	if len(s.Visible()) == 0 {
+		b.WriteString("  No findings. Canonical Intent is valid.\n")
+		return b.String()
+	}
 	for _, f := range s.Visible() {
 		fmt.Fprintf(&b, "[%s] %s %s/%s\n%s\n", f.Severity, f.Code, f.RecordType, f.RecordID, f.Message)
 	}

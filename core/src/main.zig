@@ -953,7 +953,8 @@ fn writeDiffResult(allocator: std.mem.Allocator, io: std.Io, request: core.proto
             before = parsed.value;
             // parsed is intentionally retained by the arena allocator for this request.
         } else |_| return writeFailure(io, request.request_id, "invalid_artifact", "Requested source revision could not be read.");
-    } else if (isIntentDirectory(io, path) and to_id != null and !std.mem.eql(u8, target_id, stringFromValue(current.value, "revision_id") orelse "")) {
+    }
+    if (isIntentDirectory(io, path) and to_id != null and !std.mem.eql(u8, target_id, stringFromValue(current.value, "revision_id") orelse "")) {
         if (readRevisionValue(allocator, io, path, target_id)) |parsed| {
             current.value = parsed.value;
         } else |_| return writeFailure(io, request.request_id, "invalid_artifact", "Requested target revision could not be read.");

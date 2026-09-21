@@ -92,7 +92,7 @@ zintent workspace WORKSPACE_DIR
 
 Intent一覧では `/` で検索、`n` で既存Draft JSONの取込、`Enter` で選択Intentをcanonical stateから開きます。Draftの探索範囲はworkspaceの兄弟にある`draft/`です。たとえばworkspaceが`project/intents/`なら`project/draft/`以下のJSONが一覧になり、`j/k`または矢印で選択できます。取込はsource hash、coreが提案したID・保存先、findingを確認してから確定します。元Draftは変更されず、失敗時に部分的なIntentは公開されません。
 
-画面は `Intent list → Dashboard → Review / Comments / Completion / Approval / History / Validation / Snapshot / Recovery` の構成です。共通キーは `Esc` 戻る、`q` 終了、`r/c/f/p/h/v/s/R` が各画面への移動です。入力中は`Esc`で取消し、確定操作は`Enter`で行います。Approvalはfresh challengeの完全一致を必要とし、Recoveryは観測後に変化していない一時ファイルだけを削除します。
+画面は `Intent list → Dashboard → Review / Comments / Completion / Approval / History / Validation / Snapshot / Recovery` の構成です。共通キーは `Esc` 戻る、`q` 終了、`r/c/f/p/h/v/s/R` が各画面への移動です。入力中は`Esc`で取消し、確定操作は`Enter`で行います。Commentsではopen commentを`r`でresolve、`w`でwithdrawし、Completionでは`Enter`で選択blockerへ移動します。Historyでは`Enter`でrevisionを検証し、`d`で親revisionとの差分を表示します。Recoveryでは`Space`で一時ファイルを選択し、`x`の後に`Enter`でcleanupを確認します。Approvalはfresh challengeの完全一致を必要とし、Recoveryは観測後に変化していない一時ファイルだけを削除します。stale revisionを検出した場合は未確定入力とcapabilityを破棄してcanonical stateを再読込します。
 
 ## Storeレイアウトと復旧
 

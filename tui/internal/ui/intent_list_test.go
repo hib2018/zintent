@@ -9,6 +9,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/hib2018/zintent/tui/internal/protocol"
 )
 
 type resumeExecutor struct{}
@@ -30,6 +31,26 @@ func TestProvenanceTextAcceptsObjectContract(t *testing.T) {
 	}
 	if provenanceText(json.RawMessage(`"legacy"`)) != "legacy" {
 		t.Fatal("legacy string provenance broke")
+	}
+}
+
+func TestWorkspaceStaleRevisionDiscardsPendingStateAndReloadsCanonical(t *testing.T) {
+	m := NewWorkspace()
+	m.WorkspaceExecutor = resumeExecutor{}
+	m.IntentPath = "/tmp/intents/intent-a"
+	m.ReviewFlow.Modal, m.ReviewFlow.PendingAction, m.ReviewFlow.Input = "submitting", "edit_item", "stale text"
+	m.ReviewFlow.PreviewToken, m.ReviewFlow.ApprovalToken = "preview", "approval"
+	m.CommentAction, m.CommentInput = "resolve", "reason"
+	next, cmd := m.Update(ActionResultMsg{Response: protocol.Response{Error: &protocol.Error{Code: "stale_revision", Message: "stale"}}})
+	m = next.(WorkspaceModel)
+	if cmd == nil {
+		t.Fatal("stale revision must trigger a canonical reload")
+	}
+	if m.ReviewFlow.Modal != "" || m.ReviewFlow.Input != "" || m.ReviewFlow.PreviewToken != "" || m.CommentAction != "" {
+		t.Fatal("stale pending input and capabilities were retained")
+	}
+	if _, ok := cmd().(WorkspaceCanonicalMsg); !ok {
+		t.Fatal("reload command did not request canonical Intent")
 	}
 }
 

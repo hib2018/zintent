@@ -1,5 +1,10 @@
 package ui
 
+import (
+	"fmt"
+	"strings"
+)
+
 type CommentRecord struct{ ID, TargetItemID, Body, Status string }
 type CommentsScreen struct {
 	Records                  []CommentRecord
@@ -30,7 +35,25 @@ func (s CommentsScreen) Selected() *CommentRecord {
 	}
 	return nil
 }
-func ValidateClosureReason(reason string) bool { return len([]rune(reason)) > 0 }
+func (s CommentsScreen) View() string {
+	var b strings.Builder
+	b.WriteString("COMMENTS\n")
+	if len(s.Records) == 0 {
+		b.WriteString("  No comments.\n")
+		return b.String()
+	}
+	for _, record := range s.Records {
+		marker := "  "
+		if record.ID == s.SelectedID {
+			marker = "→ "
+		}
+		fmt.Fprintf(&b, "%s[%s] %s\n  Item: %s\n  %s\n\n", marker, record.Status, shortRef(record.ID), shortRef(record.TargetItemID), record.Body)
+	}
+	b.WriteString("j/k select  r resolve  w withdraw  Esc back")
+	return b.String()
+}
+
+func ValidateClosureReason(reason string) bool { return len([]rune(strings.TrimSpace(reason))) > 0 }
 func (s CommentsScreen) Move(delta int) CommentsScreen {
 	if len(s.Records) == 0 {
 		return s

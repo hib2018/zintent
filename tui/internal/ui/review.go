@@ -70,6 +70,7 @@ func (s ReviewScreen) Visible() []Item {
 type Model struct {
 	IntentID, Revision, Lifecycle, Actor string
 	Items                                []Item
+	Comments                             []CommentRecord
 	Selected                             int
 	Width, Height                        int
 	Findings                             []string
@@ -94,6 +95,11 @@ func (m Model) ResumeBlockers() []string {
 	for _, item := range m.Items {
 		if item.Status == "unreviewed" || item.Status == "" {
 			blockers = append(blockers, "unreviewed item: "+item.ID)
+		}
+	}
+	for _, comment := range m.Comments {
+		if comment.Status == "open" {
+			blockers = append(blockers, "open comment: "+comment.ID)
 		}
 	}
 	if m.Lifecycle == "review_complete" && len(blockers) == 0 {
@@ -263,6 +269,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							Statement string `json:"statement"`
 							Status    string `json:"review_status"`
 						} `json:"items"`
+						Comments []struct {
+							ID           string `json:"comment_id"`
+							TargetItemID string `json:"target_item_id"`
+							Body         string `json:"body"`
+							Status       string `json:"status"`
+						} `json:"comments"`
 					} `json:"revision_payload"`
 				} `json:"intent"`
 			} `json:"data"`
@@ -283,6 +295,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if item.ID == selectedID {
 				m.Selected = len(m.Items) - 1
 			}
+		}
+		m.Comments = make([]CommentRecord, 0, len(result.Data.Intent.Payload.Comments))
+		for _, comment := range result.Data.Intent.Payload.Comments {
+			m.Comments = append(m.Comments, CommentRecord{ID: comment.ID, TargetItemID: comment.TargetItemID, Body: comment.Body, Status: comment.Status})
 		}
 		m.ExpectedRevision = m.Revision
 		if setter, ok := m.Executor.(interface{ SetExpected(string) }); ok {
