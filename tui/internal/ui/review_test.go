@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -45,6 +46,19 @@ func TestReviewModalCanCancelAndConfirm(t *testing.T) {
 	_, cmd := next.(Model).Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
 	if cmd == nil {
 		t.Fatal("reject with a reason must dispatch")
+	}
+}
+
+func TestEditStartsWithCurrentStatement(t *testing.T) {
+	m := New([]Item{{ID: "i1", Statement: "現在のタイトル"}})
+	next, _ := m.Update(tea.KeyPressMsg(tea.Key{Text: "e", Code: 'e'}))
+	m = next.(Model)
+	if m.PendingAction != "edit-preview" || m.Input != "現在のタイトル" {
+		t.Fatalf("edit did not preload current statement: %#v", m)
+	}
+	view := m.View()
+	if !strings.Contains(view.Content, "New statement: 現在のタイトル") || view.Cursor == nil {
+		t.Fatalf("preloaded edit input is not visible: %s", view.Content)
 	}
 }
 

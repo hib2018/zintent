@@ -150,6 +150,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.PendingAction = map[string]string{"a": "accept", "e": "edit-preview", "c": "comment", "x": "reject"}[msg.String()]
 				m.Modal = m.PendingAction
 				m.Input = ""
+				if msg.String() == "e" {
+					m.Input = m.Items[m.Selected].Statement
+				}
 			}
 		case "f":
 			if m.Lifecycle == "review_complete" || m.Lifecycle == "approved" {
