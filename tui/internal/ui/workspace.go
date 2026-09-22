@@ -703,15 +703,16 @@ func (m WorkspaceModel) View() tea.View {
 	}
 	header := fmt.Sprintf("ZINTENT WORKSPACE  %-10s  intent:%-19s  revision:%s", strings.ToUpper(m.Screen().String()), shortRef(fallback(m.IntentID, "-")), shortRef(fallback(m.Revision, "-")))
 	main := m.screenBody()
-	bodyHeight := max(8, height-13)
+	bodyHeight := max(8, height-9)
 	mainTitle := "Main: " + m.Screen().String()
 	intentList := m.IntentList
 	var body string
 	if width < 72 {
-		intentPaneHeight := max(6, bodyHeight/3)
+		intentPaneHeight := max(4, bodyHeight/3)
+		mainPaneHeight := max(4, bodyHeight-intentPaneHeight-1)
 		intentList.Height = intentPaneHeight - 2
 		body = strings.Join(renderPane("Intents", intentList.View(), width, intentPaneHeight, m.Screen() == ScreenIntentList), "\n") + "\n" +
-			strings.Join(renderPane(mainTitle, main, width, bodyHeight, m.Screen() != ScreenIntentList), "\n")
+			strings.Join(renderPane(mainTitle, main, width, mainPaneHeight, m.Screen() != ScreenIntentList), "\n")
 	} else {
 		left := max(24, width/4)
 		right := width - left - 1
@@ -741,8 +742,6 @@ func (m WorkspaceModel) View() tea.View {
 		}
 		b.WriteString(strings.Join(renderPane("Import Draft", modal.String(), width, modalHeight, true), "\n"))
 	}
-	b.WriteByte('\n')
-	b.WriteString(strings.Join(renderPane("Nav", m.navigationBar(), width, 4, false), "\n"))
 	b.WriteByte('\n')
 	b.WriteString(strings.Join(renderPane("Status", status, width, 3, false), "\n"))
 	b.WriteString("\nenter open  esc back  q quit\n")
@@ -776,27 +775,6 @@ func (m WorkspaceModel) activeInput() (string, string) {
 	default:
 		return "", ""
 	}
-}
-
-func (m WorkspaceModel) navigationBar() string {
-	items := []struct {
-		screen Screen
-		label  string
-	}{
-		{ScreenReview, "r Review"}, {ScreenComments, "c Comments"}, {ScreenCompletion, "f Complete"},
-		{ScreenApproval, "p Approve"}, {ScreenHistory, "h History"}, {ScreenValidation, "v Validate"},
-		{ScreenSnapshot, "s Snapshot"}, {ScreenRecovery, "R Recovery"}, {ScreenIntentList, "n New Draft"},
-	}
-	parts := make([]string, 0, len(items)+1)
-	for _, item := range items {
-		label := item.label
-		if item.screen == m.Screen() {
-			label = "[" + label + "]"
-		}
-		parts = append(parts, label)
-	}
-	parts = append(parts, "/ Search", "? Help")
-	return strings.Join(parts, "  ")
 }
 
 func (m WorkspaceModel) screenBody() string {
