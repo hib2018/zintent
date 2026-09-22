@@ -25,13 +25,23 @@ pub fn discover(allocator: std.mem.Allocator, io: std.Io, workspace_path: []cons
             continue;
         };
         defer allocator.free(verified.bytes);
+        var revision = std.json.parseFromSlice(std.json.Value, allocator, verified.bytes, .{ .allocate = .alloc_always }) catch {
+            var finding = try std.json.ObjectMap.init(allocator, &.{}, &.{});
+            try finding.put(allocator, "code", .{ .string = "corrupt_entry" });
+            try finding.put(allocator, "severity", .{ .string = "blocking" });
+            try finding.put(allocator, "record_id", .{ .string = try allocator.dupe(u8, entry.name) });
+            try finding.put(allocator, "message", .{ .string = "Intent revision is not valid JSON." });
+            try findings.append(.{ .object = finding });
+            continue;
+        };
+        defer revision.deinit();
         var object = try std.json.ObjectMap.init(allocator, &.{}, &.{});
         try object.put(allocator, "intent_id", .{ .string = try allocator.dupe(u8, verified.head.intent_id) });
         try object.put(allocator, "display_name", .{ .string = try allocator.dupe(u8, entry.name) });
         try object.put(allocator, "intent_path", .{ .string = try allocator.dupe(u8, entry.name) });
         try object.put(allocator, "current_revision_id", .{ .string = try allocator.dupe(u8, verified.head.current_revision_id) });
         try object.put(allocator, "lifecycle_state", .{ .string = try allocator.dupe(u8, verified.head.lifecycle_state) });
-        try object.put(allocator, "blocker_count", .{ .integer = 0 });
+        try object.put(allocator, "blocker_count", .{ .integer = @intCast(blockerCount(revision.value)) });
         try object.put(allocator, "approval_state", .{ .string = if (verified.head.approved_snapshot_ref != null) "approved" else "none" });
         if (verified.head.approved_snapshot_ref) |id| try object.put(allocator, "snapshot_id", .{ .string = try allocator.dupe(u8, id) }) else try object.put(allocator, "snapshot_id", .null);
         try entries.append(.{ .object = object });
@@ -46,8 +56,53 @@ pub fn discover(allocator: std.mem.Allocator, io: std.Io, workspace_path: []cons
     return .{ .entries = entries, .findings = findings };
 }
 
+pub fn blockerCount(revision: std.json.Value) usize {
+    const root = switch (revision) {
+        .object => |value| value,
+        else => return 0,
+    };
+    const payload_value = root.get("revision_payload") orelse return 0;
+    const payload = switch (payload_value) {
+        .object => |value| value,
+        else => return 0,
+    };
+    var count: usize = 0;
+    if (payload.get("items")) |items_value| switch (items_value) {
+        .array => |items| for (items.items) |item_value| {
+            const item = switch (item_value) {
+                .object => |value| value,
+                else => continue,
+            };
+            const status = item.get("review_status");
+            if (status == null or status.? != .string or std.mem.eql(u8, status.?.string, "unreviewed")) count += 1;
+        },
+        else => {},
+    };
+    if (payload.get("comments")) |comments_value| switch (comments_value) {
+        .array => |comments| for (comments.items) |comment_value| {
+            const comment = switch (comment_value) {
+                .object => |value| value,
+                else => continue,
+            };
+            const status = comment.get("status") orelse continue;
+            if (status == .string and std.mem.eql(u8, status.string, "open")) count += 1;
+        },
+        else => {},
+    };
+    return count;
+}
+
 pub fn lessThan(_: void, left: model.WorkspaceEntry, right: model.WorkspaceEntry) bool {
     return std.mem.lessThan(u8, left.intent_id, right.intent_id);
+}
+
+test "blocker count includes unreviewed items and open comments" {
+    const source =
+        \\{"revision_payload":{"items":[{"review_status":"unreviewed"},{"review_status":"accepted"},{}],"comments":[{"status":"open"},{"status":"resolved"}]}}
+    ;
+    var parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, source, .{ .allocate = .alloc_always });
+    defer parsed.deinit();
+    try std.testing.expectEqual(@as(usize, 3), blockerCount(parsed.value));
 }
 
 test "workspace entries sort by stable intent ID" {

@@ -28,6 +28,21 @@ func (e *recordingReviewExecutor) ExecuteComment(operation, commentID, reason st
 	return nil
 }
 
+func TestCanonicalReloadKeepsIntentListBlockersInSync(t *testing.T) {
+	m := NewWorkspace()
+	m.IntentList = m.IntentList.Reload([]IntentEntry{{ID: "intent-1", BlockerCount: 0}})
+	next, _ := m.Update(WorkspaceCanonicalMsg{IntentID: "intent-1", RevisionID: "revision-1", Lifecycle: "in_review", IntentPath: "/tmp/intents/intent-1", Items: []Item{{ID: "item-1", Status: "unreviewed"}, {ID: "item-2", Status: "unreviewed"}}, Comments: []CommentRecord{{ID: "comment-1", Status: "open"}}})
+	m = next.(WorkspaceModel)
+	if got := m.IntentList.Entries[0].BlockerCount; got != 3 {
+		t.Fatalf("initial blocker count=%d, want 3", got)
+	}
+	next, _ = m.Update(WorkspaceCanonicalMsg{IntentID: "intent-1", RevisionID: "revision-2", Lifecycle: "review_complete", IntentPath: "/tmp/intents/intent-1", Items: []Item{{ID: "item-1", Status: "accepted"}, {ID: "item-2", Status: "accepted"}}, Comments: []CommentRecord{{ID: "comment-1", Status: "resolved"}}})
+	m = next.(WorkspaceModel)
+	if got := m.IntentList.Entries[0].BlockerCount; got != 0 {
+		t.Fatalf("reloaded blocker count=%d, want 0", got)
+	}
+}
+
 func TestWorkspaceDashboardReflectsCanonicalState(t *testing.T) {
 	m := NewWorkspace()
 	m.Width, m.Height = 120, 40

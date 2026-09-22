@@ -70,6 +70,10 @@ func TestWorkspaceListInspectImportProtocol(t *testing.T) {
 	if !ok || len(list["entries"].([]any)) != 1 {
 		t.Fatalf("list: %s", out)
 	}
+	entry := list["entries"].([]any)[0].(map[string]any)
+	if entry["blocker_count"] != float64(1) {
+		t.Fatalf("blocker_count=%v, want 1: %s", entry["blocker_count"], out)
+	}
 	if _, err := os.Stat(filepath.Join(workspace, destination, "HEAD.json")); err != nil {
 		t.Fatal(err)
 	}

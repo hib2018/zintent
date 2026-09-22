@@ -364,6 +364,7 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ReviewFlow = flow
 		m.Comments = m.Comments.Reload(msg.Comments)
 		m.updateCompletionState()
+		m.syncIntentEntry()
 		m.updateDashboard()
 		if m.Screen() == ScreenIntentList {
 			m.nav.push(ScreenDashboard)
@@ -633,23 +634,31 @@ func (m WorkspaceModel) updateReview(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.Revision, m.Lifecycle = flow.Revision, flow.Lifecycle
 	m.Quitting = flow.Quitting
 	m.Status = flow.Status
-	for index := range m.IntentList.Entries {
-		if m.IntentList.Entries[index].ID == m.IntentID {
-			m.IntentList.Entries[index].Revision = m.Revision
-			m.IntentList.Entries[index].Lifecycle = m.Lifecycle
-			if flow.SnapshotPath != "" {
-				m.IntentList.Entries[index].SnapshotID = flow.SnapshotPath
-			}
-		}
-	}
 	m.Review = m.Review.Reload(flow.Items)
 	m.Comments = m.Comments.Reload(flow.Comments)
 	if len(flow.Items) > 0 && flow.Selected >= 0 && flow.Selected < len(flow.Items) {
 		m.Review.SelectedID = flow.Items[flow.Selected].ID
 	}
 	m.updateCompletionState()
+	m.syncIntentEntry()
 	m.updateDashboard()
 	return m, cmd
+}
+
+func (m *WorkspaceModel) syncIntentEntry() {
+	for index := range m.IntentList.Entries {
+		entry := &m.IntentList.Entries[index]
+		if entry.ID != m.IntentID {
+			continue
+		}
+		entry.Revision = m.Revision
+		entry.Lifecycle = m.Lifecycle
+		entry.BlockerCount = len(m.ReviewFlow.ResumeBlockers())
+		if m.ReviewFlow.SnapshotPath != "" {
+			entry.SnapshotID = m.ReviewFlow.SnapshotPath
+		}
+		return
+	}
 }
 
 // ReloadRecords preserves selection by stable ID. If it disappeared, the
