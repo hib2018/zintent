@@ -52,8 +52,12 @@ func TestWorkspaceCommentsResolveThroughCoreExecutor(t *testing.T) {
 
 	next, _ := m.Update(workspaceKey("r"))
 	m = next.(WorkspaceModel)
-	if m.CommentAction != "resolve" || m.View().Cursor == nil {
+	cursor := m.View().Cursor
+	if m.CommentAction != "resolve" || cursor == nil {
 		t.Fatal("resolve must open an exclusive closure-reason input")
+	}
+	if cursor.X == 0 || cursor.Y == 0 {
+		t.Fatalf("closure-reason cursor remained at top-left: %+v", cursor.Position)
 	}
 	next, _ = m.Update(tea.KeyPressMsg(tea.Key{Text: "対応済み", Code: '?'}))
 	m = next.(WorkspaceModel)
@@ -210,7 +214,11 @@ func TestWorkspaceApproveFromDashboardOpensChallengeFlow(t *testing.T) {
 		Response:  protocol.Response{OK: true, Result: json.RawMessage(`{"data":{"confirmation":{"token_id":"token-1","challenge":"APPROVE-123456","confirmed_revision_id":"revision-1","confirmed_revision_hash":"revision-hash","approved_content_hash":"content-hash"}}}`)},
 	})
 	m = next.(WorkspaceModel)
-	view := m.View().Content
+	challengeView := m.View()
+	view := challengeView.Content
+	if challengeView.Cursor == nil || challengeView.Cursor.X == 0 || challengeView.Cursor.Y == 0 {
+		t.Fatalf("workspace challenge cursor remained at top-left: %+v", challengeView.Cursor)
+	}
 	for _, expected := range []string{"APPROVAL CHALLENGE", "Revision hash", "Approved content hash", "APPROVE-123456", "Response"} {
 		if !strings.Contains(view, expected) {
 			t.Fatalf("approval input missing %q in:\n%s", expected, view)

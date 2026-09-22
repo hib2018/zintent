@@ -22,8 +22,12 @@ func TestApprovalExactCandidateAndFreshKeyInput(t *testing.T) {
 	if !m.Ready(time.Now()) {
 		t.Fatalf("not ready: %+v", m)
 	}
-	view := m.View().Content
-	for _, v := range []string{"r", "rh", "ch", "2 / 1"} {
+	approvalView := m.View()
+	view := approvalView.Content
+	if approvalView.Cursor == nil || approvalView.Cursor.X == 0 || approvalView.Cursor.Y == 0 {
+		t.Fatalf("challenge cursor is not positioned at the response: %+v", approvalView.Cursor)
+	}
+	for _, v := range []string{"r", "rh", "ch", "2 / 1", "Response: ABC"} {
 		if !strings.Contains(view, v) {
 			t.Fatal(view)
 		}

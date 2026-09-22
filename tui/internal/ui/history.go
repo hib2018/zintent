@@ -56,11 +56,11 @@ func (s HistoryScreen) View() string {
 	var b strings.Builder
 	b.WriteString("Verified history\n")
 	for index, r := range s.Revisions {
-		marker := "  "
+		line := fmt.Sprintf("  %s <- %s  %s  actor:%s  %s", shortRef(r.ID), shortRef(r.ParentID), r.OperationType, r.ActorID, r.CreatedAt)
 		if index == s.Selected {
-			marker = "→ "
+			line = highlightTopLine("→ " + strings.TrimPrefix(line, "  "))
 		}
-		fmt.Fprintf(&b, "%s%s <- %s  %s  actor:%s  %s\n", marker, shortRef(r.ID), shortRef(r.ParentID), r.OperationType, r.ActorID, r.CreatedAt)
+		b.WriteString(line + "\n")
 	}
 	if len(s.Orphans) > 0 {
 		b.WriteString("Orphans (not canonical)\n")

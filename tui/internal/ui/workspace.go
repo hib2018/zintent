@@ -736,10 +736,34 @@ func (m WorkspaceModel) View() tea.View {
 	b.WriteString("\nenter open  esc back  q quit\n")
 	v := tea.NewView(b.String())
 	v.AltScreen = true
-	if m.IntentList.FilterEditing || m.Screen() == ScreenReview && reviewAcceptsText(m.ReviewFlow) || m.Screen() == ScreenComments && m.CommentAction != "" {
-		v.Cursor = tea.NewCursor(0, 0)
+	if label, value := m.activeInput(); label != "" {
+		v.Cursor = cursorAfterLabel(v.Content, label, value)
 	}
 	return v
+}
+
+func (m WorkspaceModel) activeInput() (string, string) {
+	if m.IntentList.FilterEditing {
+		return "Filter: ", m.IntentList.Filter
+	}
+	if m.Screen() == ScreenComments && m.CommentAction != "" {
+		return "  Reason : ", m.CommentInput
+	}
+	if m.Screen() != ScreenReview || !reviewAcceptsText(m.ReviewFlow) {
+		return "", ""
+	}
+	switch m.ReviewFlow.PendingAction {
+	case "edit-preview":
+		return "New statement: ", m.ReviewFlow.Input
+	case "comment":
+		return "Comment: ", m.ReviewFlow.Input
+	case "reject":
+		return "Rejection reason: ", m.ReviewFlow.Input
+	case "approval-confirm":
+		return "  Response             : ", m.ReviewFlow.Input
+	default:
+		return "", ""
+	}
 }
 
 func (m WorkspaceModel) navigationBar() string {
@@ -770,7 +794,7 @@ func (m WorkspaceModel) screenBody() string {
 	case ScreenComments:
 		body := m.Comments.View()
 		if m.CommentAction != "" {
-			body += "\n\nCOMMENT CLOSURE\n  Action : " + m.CommentAction + "\n  Reason : " + m.CommentInput + "\n  Keys   : Enter=confirm  Esc=cancel"
+			body = "COMMENT CLOSURE\n  Action : " + m.CommentAction + "\n  Reason : " + m.CommentInput + "\n  Keys   : Enter=confirm  Esc=cancel\n\n" + body
 		}
 		return body
 	case ScreenCompletion:
@@ -843,11 +867,11 @@ func workspaceReviewBody(flow Model, width, height int) string {
 
 	var list, detail strings.Builder
 	for i, item := range flow.Items {
-		marker := "  "
+		line := reviewItemText("  ", item)
 		if i == flow.Selected {
-			marker = "→ "
+			line = highlightTopLine(reviewItemText("→ ", item))
 		}
-		list.WriteString(reviewItemText(marker, item))
+		list.WriteString(line)
 	}
 	if len(flow.Items) > 0 && flow.Selected >= 0 && flow.Selected < len(flow.Items) {
 		selected := flow.Items[flow.Selected]

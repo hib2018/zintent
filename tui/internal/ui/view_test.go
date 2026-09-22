@@ -1,6 +1,17 @@
 package ui
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+func TestSelectionColorAppliesOnlyToTopLine(t *testing.T) {
+	got := highlightTopLine("top\nchild\nchild-2")
+	lines := strings.Split(got, "\n")
+	if !strings.Contains(lines[0], "\x1b[") || strings.Contains(lines[1], "\x1b[") || strings.Contains(lines[2], "\x1b[") {
+		t.Fatalf("selection color leaked beyond top line: %q", got)
+	}
+}
 
 func TestReviewItemTextKeepsStatusWithStatementAndSeparatesItems(t *testing.T) {
 	got := reviewItemText("→ ", Item{Kind: "goal", Status: "unreviewed", Statement: "内容を確認する"})

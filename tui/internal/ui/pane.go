@@ -3,8 +3,30 @@ package ui
 import (
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 )
+
+var selectedLineStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(lipgloss.Color("62")).Bold(true)
+
+// highlightTopLine colors only the primary row of a potentially multi-line record.
+func highlightTopLine(value string) string {
+	line, rest, found := strings.Cut(value, "\n")
+	if !found {
+		return selectedLineStyle.Render(line)
+	}
+	return selectedLineStyle.Render(line) + "\n" + rest
+}
+
+func cursorAfterLabel(content, label, value string) *tea.Cursor {
+	for y, line := range strings.Split(content, "\n") {
+		if index := strings.Index(line, label); index >= 0 {
+			return tea.NewCursor(ansi.StringWidth(line[:index]+label+value), y)
+		}
+	}
+	return nil
+}
 
 // renderPane follows the compact framed-pane layout used by ztasks. Width is
 // measured in terminal cells so Japanese text and status icons keep borders

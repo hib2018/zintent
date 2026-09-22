@@ -76,8 +76,13 @@ func TestWorkspaceCursorOnlyWhileEditing(t *testing.T) {
 		t.Fatal("cursor must be hidden outside input")
 	}
 	m.IntentList.FilterEditing = true
-	if m.View().Cursor == nil {
+	m.IntentList.Filter = "日本語"
+	cursor := m.View().Cursor
+	if cursor == nil {
 		t.Fatal("text filtering must show cursor")
+	}
+	if cursor.X == 0 || cursor.Y == 0 {
+		t.Fatalf("filter cursor remained at top-left: %+v", cursor.Position)
 	}
 	m.IntentList.FilterEditing = false
 	m.Modal = ModalEditing

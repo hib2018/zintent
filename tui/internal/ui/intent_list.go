@@ -80,19 +80,31 @@ func (s IntentListScreen) View() string {
 	if height <= 0 {
 		height = 20
 	}
-	end := min(start+height, len(visible))
+	capacity := max(1, (height-2)/3)
+	selected := 0
+	for index := range visible {
+		if visible[index].ID == s.SelectedID {
+			selected = index
+			break
+		}
+	}
+	if selected < start {
+		start = selected
+	} else if selected >= start+capacity {
+		start = selected - capacity + 1
+	}
+	end := min(start+capacity, len(visible))
 	for _, e := range visible[start:end] {
-		if e.ID == s.SelectedID {
-			b.WriteString("> ")
-		} else {
-			b.WriteString("  ")
-		}
-		b.WriteString(shortRef(e.ID) + "  [" + e.Lifecycle + "]  blockers:")
-		b.WriteString(strconv.Itoa(e.BlockerCount))
+		line := "  " + shortRef(e.ID)
 		if e.Corrupt {
-			b.WriteString(" CORRUPT " + e.Finding)
+			line += " CORRUPT " + e.Finding
 		}
-		b.WriteByte('\n')
+		if e.ID == s.SelectedID {
+			line = highlightTopLine("→ " + strings.TrimPrefix(line, "  "))
+		}
+		b.WriteString(line + "\n")
+		b.WriteString("  ├─ [" + fallback(e.Lifecycle, "-") + "]\n")
+		b.WriteString("  └─ [blockers:" + strconv.Itoa(e.BlockerCount) + "]\n")
 	}
 	return b.String()
 }

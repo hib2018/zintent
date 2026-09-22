@@ -33,11 +33,11 @@ func (s CompletionScreen) View() string {
 	}
 	b.WriteString("  Status   : blocked\n\nBLOCKERS\n")
 	for index, blocker := range s.Blockers {
-		marker := "  "
+		line := "  " + blocker
 		if index == s.Selected {
-			marker = "→ "
+			line = highlightTopLine("→ " + blocker)
 		}
-		b.WriteString(marker + blocker + "\n")
+		b.WriteString(line + "\n")
 	}
 	b.WriteString("\nEnter=open blocker  j/k select  Esc back")
 	return b.String()

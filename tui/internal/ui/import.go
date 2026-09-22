@@ -54,11 +54,11 @@ func (p DraftPicker) View() string {
 	}
 	for i, entry := range p.Entries[start:end] {
 		absoluteIndex := start + i
-		marker := "  "
+		line := "  " + entry.Name
 		if absoluteIndex == p.Index {
-			marker = "→ "
+			line = highlightTopLine("→ " + entry.Name)
 		}
-		b.WriteString(marker + entry.Name + "\n")
+		b.WriteString(line + "\n")
 	}
 	if len(p.Entries) > end {
 		fmt.Fprintf(&b, "  … %d more\n", len(p.Entries)-end)

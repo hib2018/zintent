@@ -43,11 +43,11 @@ func (s CommentsScreen) View() string {
 		return b.String()
 	}
 	for _, record := range s.Records {
-		marker := "  "
+		line := fmt.Sprintf("  [%s] %s", record.Status, shortRef(record.ID))
 		if record.ID == s.SelectedID {
-			marker = "→ "
+			line = highlightTopLine("→ " + strings.TrimPrefix(line, "  "))
 		}
-		fmt.Fprintf(&b, "%s[%s] %s\n  Item: %s\n  %s\n\n", marker, record.Status, shortRef(record.ID), shortRef(record.TargetItemID), record.Body)
+		fmt.Fprintf(&b, "%s\n  Item: %s\n  %s\n\n", line, shortRef(record.TargetItemID), record.Body)
 	}
 	b.WriteString("j/k select  r resolve  w withdraw  Esc back")
 	return b.String()

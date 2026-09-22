@@ -40,8 +40,9 @@ func (m ApprovalModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.Cancelled = true
 				m.Status = "approval cancelled"
 			case "backspace":
-				if len(m.Response) > 0 {
-					m.Response = m.Response[:len(m.Response)-1]
+				runes := []rune(m.Response)
+				if len(runes) > 0 {
+					m.Response = string(runes[:len(runes)-1])
 				}
 			case "enter":
 				if m.Ready(time.Now()) {
@@ -102,6 +103,8 @@ func (m ApprovalModel) View() tea.View {
 	b.WriteString("\n")
 	b.WriteString("Challenge: ")
 	b.WriteString(m.Challenge)
+	b.WriteString("\nResponse: ")
+	b.WriteString(m.Response)
 	b.WriteString("\n\n")
 	b.WriteString(fmt.Sprintf("Included / excluded: %d / %d\n", m.IncludedCount, m.ExcludedCount))
 	if len(m.Blockers) > 0 {
@@ -120,5 +123,9 @@ func (m ApprovalModel) View() tea.View {
 		b.WriteByte('\n')
 	}
 	b.WriteString("\nEnter approve  Esc cancel\n")
-	return tea.NewView(b.String())
+	view := tea.NewView(b.String())
+	if m.Focused {
+		view.Cursor = cursorAfterLabel(view.Content, "Response: ", m.Response)
+	}
+	return view
 }

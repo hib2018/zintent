@@ -17,11 +17,11 @@ func (s RecoveryScreen) View() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Recovery status\nRevision: %s\nHEAD hash: %s\n", s.RevisionID, s.HeadHash)
 	for index, c := range s.Temporary {
-		marker := "  "
+		line := fmt.Sprintf("  [%t] %s %s %d bytes", c.Selected, c.ID, c.Kind, c.Size)
 		if index == s.Cursor {
-			marker = "→ "
+			line = highlightTopLine("→ " + strings.TrimPrefix(line, "  "))
 		}
-		fmt.Fprintf(&b, "%s[%t] %s %s %d bytes\n", marker, c.Selected, c.ID, c.Kind, c.Size)
+		b.WriteString(line + "\n")
 	}
 	if len(s.Orphans) > 0 {
 		b.WriteString("Protected orphans\n")

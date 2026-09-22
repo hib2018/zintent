@@ -70,6 +70,17 @@ func TestWorkspaceOpenResumesAtFirstUnresolvedItem(t *testing.T) {
 	}
 }
 
+func TestIntentListUsesThreeLineTreeAndHighlightsOnlyID(t *testing.T) {
+	view := (IntentListScreen{Entries: []IntentEntry{{ID: "intent-a", Lifecycle: "in_review", BlockerCount: 2}}, SelectedID: "intent-a", Height: 8}).View()
+	lines := strings.Split(view, "\n")
+	if len(lines) < 5 || !strings.Contains(lines[2], "intent-a") || !strings.Contains(lines[3], "├─ [in_review]") || !strings.Contains(lines[4], "└─ [blockers:2]") {
+		t.Fatalf("unexpected Intent tree:\n%s", view)
+	}
+	if !strings.Contains(lines[2], "\x1b[") || strings.Contains(lines[3], "\x1b[") || strings.Contains(lines[4], "\x1b[") {
+		t.Fatalf("only the selected Intent ID row may be colored:\n%q", view)
+	}
+}
+
 func TestIntentListSearchStableSelectionAndCorruption(t *testing.T) {
 	s := IntentListScreen{SelectedID: "b", Filter: "review"}.Reload([]IntentEntry{{ID: "b", DisplayName: "review beta", Lifecycle: "in_review"}, {ID: "a", DisplayName: "draft", Lifecycle: "draft"}, {ID: "corrupt", DisplayName: "review bad", Corrupt: true, Finding: "bad HEAD"}})
 	if s.SelectedID != "b" || len(s.Visible()) != 2 {

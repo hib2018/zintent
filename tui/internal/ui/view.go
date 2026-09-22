@@ -20,12 +20,11 @@ func renderView(m Model) tea.View {
 	}
 	for i := start; i < end; i++ {
 		item := m.Items[i]
+		line := reviewItemText("  ", item)
 		if i == m.Selected {
-			list.WriteString("→ ")
-		} else {
-			list.WriteString("  ")
+			line = highlightTopLine(reviewItemText("→ ", item))
 		}
-		list.WriteString(reviewItemText("", item))
+		list.WriteString(line)
 	}
 
 	if len(m.Items) > 0 {
@@ -57,6 +56,7 @@ func renderView(m Model) tea.View {
 		right := width - left - 1
 		b.WriteString(joinPanes(renderPane("Items", list.String(), left, height, true), renderPane("Item Detail", detail.String(), right, height, false)))
 	}
+	inputLabel := ""
 	if m.Modal != "" && len(m.Items) > 0 {
 		b.WriteString("\nConfirm ")
 		b.WriteString(m.Modal)
@@ -70,13 +70,22 @@ func renderView(m Model) tea.View {
 			b.WriteString(m.After)
 			b.WriteByte('\n')
 		}
-		if m.Input != "" {
-			b.WriteString("input: ")
+		switch m.PendingAction {
+		case "edit-preview":
+			inputLabel = "New statement: "
+		case "comment":
+			inputLabel = "Comment: "
+		case "reject":
+			inputLabel = "Rejection reason: "
+		}
+		if inputLabel != "" {
+			b.WriteString(inputLabel)
 			b.WriteString(m.Input)
 			b.WriteByte('\n')
 		}
 	}
 	if m.PendingAction == "approval-confirm" {
+		inputLabel = "Response: "
 		b.WriteString("\nRevision hash: ")
 		b.WriteString(m.RevisionHash)
 		b.WriteString("\nApproved content hash: ")
@@ -111,7 +120,11 @@ func renderView(m Model) tea.View {
 		}
 	}
 	b.WriteString("\n↑/↓ j/k navigate  a accept  e edit  c comment  x reject  f complete  p approve  q quit\n")
-	return tea.NewView(b.String())
+	view := tea.NewView(b.String())
+	if inputLabel != "" {
+		view.Cursor = cursorAfterLabel(view.Content, inputLabel, m.Input)
+	}
+	return view
 }
 
 func reviewItemText(marker string, item Item) string {
