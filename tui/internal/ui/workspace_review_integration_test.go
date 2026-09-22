@@ -117,14 +117,14 @@ func TestWorkspaceReviewRendersCanonicalItemsAndMovesSelection(t *testing.T) {
 		Lifecycle:  "draft",
 		IntentPath: "/tmp/intents/intent-1",
 		Items: []Item{
-			{ID: "item-1", Kind: "goal", Statement: "First statement", Status: "unreviewed"},
+			{ID: "item-1", Kind: "goal", Statement: "First statement", Status: "unreviewed", Provenance: "origin=human"},
 			{ID: "item-2", Kind: "constraint", Statement: "Second statement", Status: "unreviewed"},
 		},
 	})
 	m = next.(WorkspaceModel)
 
 	view := m.View().Content
-	for _, expected := range []string{"First statement", "Second", "Kind       : goal"} {
+	for _, expected := range []string{"First statement", "Second", "Kind       : goal", "Provenance : origin=human"} {
 		if !strings.Contains(view, expected) {
 			t.Fatalf("workspace review missing %q in:\n%s", expected, view)
 		}
