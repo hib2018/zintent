@@ -70,7 +70,11 @@ func (s *IntentListScreen) Move(delta int) {
 }
 func (s IntentListScreen) View() string {
 	var b strings.Builder
-	b.WriteString("Intent list\nFilter: " + s.Filter + "\n")
+	headerRows := 0
+	if s.FilterEditing || s.Filter != "" {
+		b.WriteString("Filter: " + s.Filter + "\n")
+		headerRows = 1
+	}
 	if len(s.Visible()) == 0 {
 		b.WriteString("No Intent selected.\n")
 	}
@@ -80,7 +84,7 @@ func (s IntentListScreen) View() string {
 	if height <= 0 {
 		height = 20
 	}
-	capacity := max(1, (height-2)/3)
+	capacity := max(1, (height-headerRows)/3)
 	selected := 0
 	for index := range visible {
 		if visible[index].ID == s.SelectedID {

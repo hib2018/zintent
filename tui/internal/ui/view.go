@@ -22,7 +22,7 @@ func renderView(m Model) tea.View {
 		item := m.Items[i]
 		line := reviewItemText("  ", item)
 		if i == m.Selected {
-			line = highlightTopLine(reviewItemText("→ ", item))
+			line = selectedReviewItemText("→ ", item)
 		}
 		list.WriteString(line)
 	}
@@ -129,6 +129,11 @@ func renderView(m Model) tea.View {
 
 func reviewItemText(marker string, item Item) string {
 	return marker + "[" + fallback(item.Status, "unreviewed") + "] " + item.Kind + "  " + item.Statement + "\n\n"
+}
+
+func selectedReviewItemText(marker string, item Item) string {
+	label := "[" + fallback(item.Status, "unreviewed") + "] " + item.Kind
+	return marker + selectedLineStyle.Render(label) + "  " + item.Statement + "\n\n"
 }
 
 func shortRef(value string) string {

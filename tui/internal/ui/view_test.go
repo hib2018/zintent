@@ -13,6 +13,15 @@ func TestSelectionColorAppliesOnlyToTopLine(t *testing.T) {
 	}
 }
 
+func TestReviewSelectionColorsOnlyStatusAndKind(t *testing.T) {
+	got := selectedReviewItemText("→ ", Item{Kind: "goal", Status: "accepted", Statement: "statement remains plain"})
+	styleStart := strings.Index(got, "\x1b[")
+	styleEnd := strings.Index(got, "\x1b[m")
+	if styleStart <= strings.Index(got, "→") || styleEnd < styleStart || strings.Index(got, "statement remains plain") < styleEnd {
+		t.Fatalf("selection escaped status/kind label: %q", got)
+	}
+}
+
 func TestReviewItemTextKeepsStatusWithStatementAndSeparatesItems(t *testing.T) {
 	got := reviewItemText("→ ", Item{Kind: "goal", Status: "unreviewed", Statement: "内容を確認する"})
 	want := "→ [unreviewed] goal  内容を確認する\n\n"

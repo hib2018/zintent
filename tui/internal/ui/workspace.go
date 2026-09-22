@@ -693,18 +693,21 @@ func (m WorkspaceModel) View() tea.View {
 		height = 24
 	}
 	header := fmt.Sprintf("ZINTENT WORKSPACE  %-10s  intent:%-19s  revision:%s", strings.ToUpper(m.Screen().String()), shortRef(fallback(m.IntentID, "-")), shortRef(fallback(m.Revision, "-")))
-	intents := m.IntentList.View()
 	main := m.screenBody()
 	bodyHeight := max(8, height-13)
 	mainTitle := "Main: " + m.Screen().String()
+	intentList := m.IntentList
 	var body string
 	if width < 72 {
-		body = strings.Join(renderPane("Intents", intents, width, max(6, bodyHeight/3), m.Screen() == ScreenIntentList), "\n") + "\n" +
+		intentPaneHeight := max(6, bodyHeight/3)
+		intentList.Height = intentPaneHeight - 2
+		body = strings.Join(renderPane("Intents", intentList.View(), width, intentPaneHeight, m.Screen() == ScreenIntentList), "\n") + "\n" +
 			strings.Join(renderPane(mainTitle, main, width, bodyHeight, m.Screen() != ScreenIntentList), "\n")
 	} else {
 		left := max(24, width/4)
 		right := width - left - 1
-		body = joinPanes(renderPane("Intents", intents, left, bodyHeight, m.Screen() == ScreenIntentList), renderPane(mainTitle, main, right, bodyHeight, m.Screen() != ScreenIntentList))
+		intentList.Height = bodyHeight - 2
+		body = joinPanes(renderPane("Intents", intentList.View(), left, bodyHeight, m.Screen() == ScreenIntentList), renderPane(mainTitle, main, right, bodyHeight, m.Screen() != ScreenIntentList))
 	}
 	status := fallback(m.Status, "Ready")
 	var b strings.Builder
@@ -869,7 +872,7 @@ func workspaceReviewBody(flow Model, width, height int) string {
 	for i, item := range flow.Items {
 		line := reviewItemText("  ", item)
 		if i == flow.Selected {
-			line = highlightTopLine(reviewItemText("→ ", item))
+			line = selectedReviewItemText("→ ", item)
 		}
 		list.WriteString(line)
 	}

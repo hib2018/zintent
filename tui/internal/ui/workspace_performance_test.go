@@ -18,8 +18,8 @@ func TestIntentListThousandEntriesRendersBoundedRowsUnder100ms(t *testing.T) {
 	if elapsed := time.Since(started); elapsed >= 100*time.Millisecond {
 		t.Fatalf("render took %s", elapsed)
 	}
-	if rows := strings.Count(view, "intent-"); rows != 7 {
-		t.Fatalf("rendered %d three-line entries, want 7", rows)
+	if rows := strings.Count(view, "intent-"); rows != 8 {
+		t.Fatalf("rendered %d three-line entries, want 8", rows)
 	}
 }
 
