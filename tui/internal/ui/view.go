@@ -33,10 +33,10 @@ func renderView(m Model) tea.View {
 		detail.WriteString("  ID         : " + shortRef(selected.ID) + "\n")
 		detail.WriteString("  Kind       : " + selected.Kind + "\n")
 		detail.WriteString("  Status     : " + fallback(selected.Status, "unreviewed") + "\n")
-		if selected.Provenance != "" {
-			detail.WriteString("  Provenance : " + selected.Provenance + "\n")
-		}
 		detail.WriteString("\nSTATEMENT\n  " + selected.Statement + "\n")
+		if selected.Provenance != "" {
+			detail.WriteString("\nPROVENANCE\n  " + strings.ReplaceAll(selected.Provenance, "\n", "\n  ") + "\n")
+		}
 		if selected.Rationale != "" {
 			detail.WriteString("\nRATIONALE\n  " + selected.Rationale + "\n")
 		}

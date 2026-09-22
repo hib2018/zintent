@@ -26,7 +26,7 @@ func (resumeExecutor) OpenIntent(string) tea.Cmd {
 
 func TestProvenanceTextAcceptsObjectContract(t *testing.T) {
 	got := provenanceText(json.RawMessage(`{"content_origin":"human","operation_id":"op-1"}`))
-	if got != "origin=human" {
+	if got != "origin    : human" {
 		t.Fatal(got)
 	}
 	if provenanceText(json.RawMessage(`"legacy"`)) != "legacy" {

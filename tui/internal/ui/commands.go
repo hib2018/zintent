@@ -469,15 +469,15 @@ func provenanceText(raw json.RawMessage) string {
 	if json.Unmarshal(raw, &provenance) == nil && (provenance.ContentOrigin != "" || provenance.OperationType != "") {
 		parts := make([]string, 0, 3)
 		if provenance.ContentOrigin != "" {
-			parts = append(parts, "origin="+provenance.ContentOrigin)
+			parts = append(parts, "origin    : "+provenance.ContentOrigin)
 		}
 		if provenance.OperationType != "" {
-			parts = append(parts, "operation="+provenance.OperationType)
+			parts = append(parts, "operation : "+provenance.OperationType)
 		}
 		if provenance.OperationActor != nil && provenance.OperationActor.ActorID != "" {
-			parts = append(parts, "actor="+provenance.OperationActor.ActorID)
+			parts = append(parts, "actor     : "+provenance.OperationActor.ActorID)
 		}
-		return strings.Join(parts, "  ")
+		return strings.Join(parts, "\n")
 	}
 	var compact bytes.Buffer
 	if json.Compact(&compact, raw) == nil {

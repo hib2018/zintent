@@ -867,10 +867,10 @@ func workspaceReviewBody(flow Model, width, height int) string {
 		selected := flow.Items[flow.Selected]
 		detail.WriteString("ITEM\n")
 		fmt.Fprintf(&detail, "  ID         : %s\n  Kind       : %s\n  Status     : %s\n", shortRef(selected.ID), selected.Kind, fallback(selected.Status, "unreviewed"))
-		if selected.Provenance != "" {
-			detail.WriteString("  Provenance : " + selected.Provenance + "\n")
-		}
 		detail.WriteString("\nSTATEMENT\n  " + selected.Statement + "\n")
+		if selected.Provenance != "" {
+			detail.WriteString("\nPROVENANCE\n  " + strings.ReplaceAll(selected.Provenance, "\n", "\n  ") + "\n")
+		}
 		if selected.Rationale != "" {
 			detail.WriteString("\nRATIONALE\n  " + selected.Rationale + "\n")
 		}
