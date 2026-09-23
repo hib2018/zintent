@@ -212,6 +212,9 @@ func (m WorkspaceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "r":
 			m.nav.push(ScreenReview)
+			if m.IntentPath != "" {
+				return m.updateReview(msg)
+			}
 		case "c":
 			m.nav.push(ScreenComments)
 		case "f":
@@ -522,6 +525,16 @@ func (m WorkspaceModel) updateCompletionKey(msg tea.KeyPressMsg) (tea.Model, tea
 					m.Comments.SelectedID = id
 					m.nav.push(ScreenComments)
 					return m, nil
+				}
+				if blocker == "no items included in approval" {
+					for index, item := range m.ReviewFlow.Items {
+						if item.Status == "rejected" || item.Excluded {
+							m.ReviewFlow.Selected = index
+							m.Review.SelectedID = item.ID
+							m.nav.push(ScreenReview)
+							return m, nil
+						}
+					}
 				}
 			}
 			m.Status = "review completion is blocked"

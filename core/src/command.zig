@@ -113,9 +113,12 @@ pub const Command = struct {
             try self.actor.?.validate();
         }
         switch (self.operation) {
-            .preview_edit => if (self.item_id == null or self.statement == null or self.actor == null) return error.InvalidCommand,
-            .edit_item => if (self.item_id == null or self.statement == null or self.preview_token == null) return error.InvalidCommand,
-            .reject_item => if (self.item_id == null or self.rationale == null) return error.InvalidCommand,
+            .accept_item => if (self.item_id == null or self.item_id.?.len == 0) return error.InvalidCommand,
+            .preview_edit => if (self.item_id == null or self.item_id.?.len == 0 or self.statement == null or self.statement.?.len == 0 or self.actor == null) return error.InvalidCommand,
+            .edit_item => if (self.item_id == null or self.item_id.?.len == 0 or self.statement == null or self.statement.?.len == 0 or self.preview_token == null) return error.InvalidCommand,
+            .reject_item => if (self.item_id == null or self.item_id.?.len == 0 or self.rationale == null or self.rationale.?.len == 0) return error.InvalidCommand,
+            .add_comment => if (self.item_id == null or self.item_id.?.len == 0 or self.body == null or self.body.?.len == 0) return error.InvalidCommand,
+            .resolve_comment, .withdraw_comment => if (self.comment_id == null or self.comment_id.?.len == 0 or self.reason == null or self.reason.?.len == 0) return error.InvalidCommand,
             .prepare_approval => if (self.interactive_tty != true) return error.TtyRequired,
             .approve_intent => if (self.interactive_tty != true or self.confirmation_token == null or self.challenge_response == null) return error.InvalidConfirmation,
             .list_intents => if (self.workspace_path == null) return error.InvalidCommand,

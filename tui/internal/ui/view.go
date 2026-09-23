@@ -119,7 +119,7 @@ func renderView(m Model) tea.View {
 			b.WriteByte('\n')
 		}
 	}
-	b.WriteString("\n↑/↓ j/k navigate  a accept  e edit  c comment  x reject  f complete  p approve  q quit\n")
+	b.WriteString("\n↑/↓ j/k navigate  r start  a accept  e edit  c comment  x reject  f complete  p approve  q quit\n")
 	view := tea.NewView(b.String())
 	if inputLabel != "" {
 		view.Cursor = cursorAfterLabel(view.Content, inputLabel, m.Input)

@@ -82,8 +82,9 @@ content is an idempotency conflict. The hash excludes only the `revision_hash` f
 | source_reference_ids | UUID v7[] | References must resolve |
 | supersedes / superseded_by | UUID v7[] | No self-reference or cycles |
 
-A rejected item is terminal in its lineage, retained in history, and excluded from approved
-content. Reintroduction creates a new item that supersedes the rejected item.
+A rejected item is retained in history and excluded from approved content. A later human accept
+or edit operation reverses the rejection on the same item, restores approval inclusion, and clears
+the rejection rationale.
 
 ## Comment
 

@@ -53,7 +53,8 @@ func TestPrepareAndApproveEligibleRevision(t *testing.T) {
 			t.Fatalf("CLI failed: %v %s", err, out)
 		}
 	}
-	runCLI("item", "accept", intent, draft.Payload.Items[0].ID, "--expected-revision", draft.RevisionID, "--operation-id", "approval-accept", "--actor-id", "alice", "--core", core)
+	runCLI("start-review", intent, "--expected-revision", draft.RevisionID, "--operation-id", "approval-start", "--actor-id", "alice", "--core", core)
+	runCLI("item", "accept", intent, draft.Payload.Items[0].ID, "--expected-revision", "approval-start", "--operation-id", "approval-accept", "--actor-id", "alice", "--core", core)
 	runCLI("complete-review", intent, "--expected-revision", "approval-accept", "--operation-id", "approval-complete", "--actor-id", "alice", "--core", core)
 	request := func(operation string, payload map[string]any) map[string]any {
 		payload["operation"] = operation

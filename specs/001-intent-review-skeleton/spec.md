@@ -150,9 +150,10 @@ continue without reconstructing prior context.
   before a state-changing operation can proceed.
 - **FR-006**: Human edits MUST be distinguishable from source content and AI-authored content and
   MUST NOT be overwritten by any automated action in this feature.
-- **FR-007**: Rejection MUST require a rationale, place the item in a terminal rejected state,
-  exclude it from active approval content, and preserve the item and its revision history.
-  Rejected status alone MUST NOT block approval.
+- **FR-007**: Rejection MUST require a rationale, exclude the item from active approval content,
+  and preserve the item and its revision history. A human reviewer MAY reverse rejection by
+  accepting or editing the same item; doing so MUST include it in approval content and clear the
+  rejection rationale. Rejected status alone MUST NOT block approval.
 - **FR-008**: Comments MUST have independent identities, target exactly one Intent Item, record
   author type and creation revision, and have an explicit open, resolved, or withdrawn status.
   Only a human reviewer may resolve or withdraw a comment; the operation MUST record a reason and

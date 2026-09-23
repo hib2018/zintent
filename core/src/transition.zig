@@ -14,24 +14,23 @@ fn findItem(items: []model.Item, item_id: []const u8) !*model.Item {
 
 pub fn acceptItem(items: []model.Item, item_id: []const u8) !void {
     const item = try findItem(items, item_id);
-    if (item.review_status == .rejected) return error.InvalidTransition;
     item.review_status = .accepted;
     item.included_in_approval = true;
+    item.rationale = null;
 }
 
 pub fn editItem(items: []model.Item, item_id: []const u8, statement: []const u8) !void {
     if (statement.len == 0) return error.InvalidItem;
     const item = try findItem(items, item_id);
-    if (item.review_status == .rejected) return error.InvalidTransition;
     item.statement = statement;
     item.review_status = .edited;
     item.included_in_approval = true;
+    item.rationale = null;
 }
 
 pub fn previewEdit(items: []model.Item, item_id: []const u8, statement: []const u8) !EditPreview {
     if (statement.len == 0) return error.InvalidItem;
     const item = try findItem(items, item_id);
-    if (item.review_status == .rejected) return error.InvalidTransition;
     return .{ .item_id = item.item_id, .before = item.statement, .after = statement };
 }
 
@@ -99,6 +98,15 @@ test "item review actions mutate only the targeted item" {
     try std.testing.expectEqualStrings("new", items[0].statement);
     try rejectItem(&items, "i-2", "out of scope");
     try std.testing.expect(!items[1].included_in_approval);
+    try acceptItem(&items, "i-2");
+    try std.testing.expect(items[1].included_in_approval);
+    try std.testing.expectEqual(model.ReviewStatus.accepted, items[1].review_status);
+    try std.testing.expect(items[1].rationale == null);
+    try rejectItem(&items, "i-1", "rewrite");
+    try editItem(&items, "i-1", "restored");
+    try std.testing.expect(items[0].included_in_approval);
+    try std.testing.expectEqual(model.ReviewStatus.edited, items[0].review_status);
+    try std.testing.expect(items[0].rationale == null);
     try std.testing.expectError(error.MissingRationale, rejectItem(&items, "i-1", ""));
 }
 

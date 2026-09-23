@@ -43,7 +43,7 @@ func TestReviewJourneyAcceptAndReopenFromCurrentArtifact(t *testing.T) {
 		var out, errOut bytes.Buffer
 		cmd.Stdout, cmd.Stderr = &out, &errOut
 		if err := cmd.Run(); err != nil {
-			t.Fatalf("CLI failed: %v (%s)", err, errOut.String())
+			t.Fatalf("CLI %v failed: %v (%s)", args, err, errOut.String())
 		}
 		return out.Bytes()
 	}
@@ -54,6 +54,9 @@ func TestReviewJourneyAcceptAndReopenFromCurrentArtifact(t *testing.T) {
 		t.Fatal("fixture has no item")
 	}
 	item := initial.Result.Data.Intent.Payload.Items[0].ID
+	if err := json.Unmarshal(run("start-review", intent, "--expected-revision", initial.Result.Data.Intent.RevisionID, "--operation-id", "journey-start", "--actor-id", "journey", "--core", core, "--output", "json"), &initial); err != nil {
+		t.Fatal(err)
+	}
 	work := t.TempDir()
 	statement := filepath.Join(work, "statement.txt")
 	reason := filepath.Join(work, "reason.txt")
@@ -130,5 +133,29 @@ func TestReviewJourneyAcceptAndReopenFromCurrentArtifact(t *testing.T) {
 	}
 	if reopened.Result.Data.Intent.RevisionID != "journey-reject" {
 		t.Fatalf("reopen did not expose published revision: %+v", reopened)
+	}
+	acceptedBytes := run("item", "accept", intent, item, "--expected-revision", "journey-reject", "--operation-id", "journey-restore", "--actor-id", "journey", "--core", core, "--output", "json")
+	var restored struct {
+		Result struct {
+			Data struct {
+				Intent struct {
+					Payload struct {
+						Items []struct {
+							ID        string  `json:"item_id"`
+							Status    string  `json:"review_status"`
+							Included  bool    `json:"included_in_approval"`
+							Rationale *string `json:"rationale"`
+						} `json:"items"`
+					} `json:"revision_payload"`
+				} `json:"intent"`
+			} `json:"data"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(acceptedBytes, &restored); err != nil {
+		t.Fatal(err)
+	}
+	got := restored.Result.Data.Intent.Payload.Items[0]
+	if got.ID != item || got.Status != "accepted" || !got.Included || got.Rationale != nil {
+		t.Fatalf("reject was not reversed: %+v", got)
 	}
 }

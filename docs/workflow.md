@@ -21,7 +21,7 @@ findings、current revision、blocker数を表示します。
 - accept: 内容をそのまま承認候補にする
 - edit: 人間の表現へ直す
 - comment: 懸念を独立recordとして残す
-- reject: 理由付きで承認対象から除外する
+- reject: 理由付きで承認対象から除外する。後からacceptまたはeditすると取り消せる
 
 各mutationは新revisionを作り、UIは成功後にcanonical stateを再読込します。
 

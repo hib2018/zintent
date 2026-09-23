@@ -100,7 +100,7 @@ Intent一覧では `/` で検索、`n` で既存Draft JSONの取込、`Enter` �
 
 ## TUIキー
 
-`j/k` または矢印で移動、`a` accept、`e` edit、`c` comment、`x` reject、`f` review完了、`p` approval案内、`q`終了です。操作はすべてZigコアへ送られ、成功後にcanonical artifactを再読み込みします。
+`j/k` または矢印で移動、`r` review開始、`a` accept、`e` edit、`c` comment、`x` reject、`f` review完了、`p` approval案内、`q`終了です。rejectは後からacceptまたはeditで取り消せます。操作はすべてZigコアへ送られ、成功後にcanonical artifactを再読み込みします。
 
 ## Actor
 

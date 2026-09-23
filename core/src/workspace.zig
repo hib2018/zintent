@@ -67,6 +67,7 @@ pub fn blockerCount(revision: std.json.Value) usize {
         else => return 0,
     };
     var count: usize = 0;
+    var included: usize = 0;
     if (payload.get("items")) |items_value| switch (items_value) {
         .array => |items| for (items.items) |item_value| {
             const item = switch (item_value) {
@@ -74,10 +75,15 @@ pub fn blockerCount(revision: std.json.Value) usize {
                 else => continue,
             };
             const status = item.get("review_status");
-            if (status == null or status.? != .string or std.mem.eql(u8, status.?.string, "unreviewed")) count += 1;
+            if (status != null and status.? == .string and std.mem.eql(u8, status.?.string, "rejected")) continue;
+            if (item.get("included_in_approval")) |value| if (value == .bool and !value.bool) continue;
+            included += 1;
+            if (status == null or status.? != .string or
+                (!std.mem.eql(u8, status.?.string, "accepted") and !std.mem.eql(u8, status.?.string, "edited"))) count += 1;
         },
         else => {},
     };
+    if (included == 0) count += 1;
     if (payload.get("comments")) |comments_value| switch (comments_value) {
         .array => |comments| for (comments.items) |comment_value| {
             const comment = switch (comment_value) {

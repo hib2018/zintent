@@ -56,9 +56,10 @@ fn writeWorkspaceImportResult(allocator: std.mem.Allocator, io: std.Io, request:
     const source_path = stringField(payload, "source_path") orelse return writeFailure(io, request.request_id, "invalid_request", "source_path is required.");
     const source = core.store.readBytes(allocator, io, source_path, core.max_message_bytes) catch return writeFailure(io, request.request_id, "draft_invalid", "Draft source could not be read.");
     defer allocator.free(source);
-    var parsed = std.json.parseFromSlice(std.json.Value, allocator, source, .{ .allocate = .alloc_always }) catch return writeFailure(io, request.request_id, "draft_invalid", "Draft is not valid JSON.");
+    var validated = core.validation.parseRevision(allocator, source) catch return writeFailure(io, request.request_id, "draft_invalid", "Draft failed validation.");
+    defer validated.deinit();
+    var parsed = std.json.parseFromSlice(std.json.Value, allocator, source, .{ .allocate = .alloc_always }) catch unreachable;
     defer parsed.deinit();
-    core.validation.validateIntent(parsed.value) catch return writeFailure(io, request.request_id, "draft_invalid", "Draft failed validation.");
     const source_hash = core.hashing.sha256Hex(source);
     const proposed = try core.import.proposedId(allocator, &source_hash);
     defer allocator.free(proposed);
@@ -291,6 +292,9 @@ fn writePreviewResult(allocator: std.mem.Allocator, io: std.Io, request: core.pr
         else => return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact could not be read."),
     };
     defer allocator.free(bytes);
+    var decoded = std.json.parseFromSlice(core.model.Revision, allocator, bytes, .{}) catch return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact does not match the revision model.");
+    defer decoded.deinit();
+    _ = core.transition.next(decoded.value.revision_payload.lifecycle_state, .edit_item) catch return writeFailure(io, request.request_id, "invalid_transition", "Edit is not allowed from the current lifecycle.");
     var parsed = std.json.parseFromSlice(std.json.Value, allocator, bytes, .{ .allocate = .alloc_always }) catch return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact is not valid JSON.");
     defer parsed.deinit();
     const root = switch (parsed.value) {
@@ -320,6 +324,7 @@ fn writePreviewResult(allocator: std.mem.Allocator, io: std.Io, request: core.pr
         .string => |value| value,
         else => return writeFailure(io, request.request_id, "invalid_request", "statement must be a string."),
     };
+    if (proposed.len == 0) return writeFailure(io, request.request_id, "invalid_request", "Edited statement must not be empty.");
     const revision_payload = root.get("revision_payload") orelse return writeFailure(io, request.request_id, "invalid_artifact", "revision_payload is required.");
     const payload_object = switch (revision_payload) {
         .object => |object| object,
@@ -390,6 +395,8 @@ fn writeMutationResult(allocator: std.mem.Allocator, io: std.Io, request: core.p
     }
     const bytes = readIntentBytes(allocator, io, path) catch return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact could not be read.");
     defer allocator.free(bytes);
+    var decoded = std.json.parseFromSlice(core.model.Revision, allocator, bytes, .{}) catch return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact does not match the revision model.");
+    defer decoded.deinit();
     var parsed = std.json.parseFromSlice(std.json.Value, allocator, bytes, .{ .allocate = .alloc_always }) catch return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact is not valid JSON.");
     defer parsed.deinit();
     var root = switch (parsed.value) {
@@ -428,7 +435,13 @@ fn writeMutationResult(allocator: std.mem.Allocator, io: std.Io, request: core.p
     var operation_record = try std.json.ObjectMap.init(allocator, &.{}, &.{});
     try operation_record.put(allocator, "type", .{ .string = @tagName(request.operation) });
     try operation_record.put(allocator, "content_digest", .{ .string = &incoming_digest });
-    const target_ids = std.json.Array.init(allocator);
+    var target_ids = std.json.Array.init(allocator);
+    switch (request.operation) {
+        .accept_item, .edit_item, .reject_item => if (stringField(payload, "item_id")) |id| try target_ids.append(.{ .string = id }),
+        .add_comment => try target_ids.append(.{ .string = operation_id }),
+        .resolve_comment, .withdraw_comment => if (stringField(payload, "comment_id")) |id| try target_ids.append(.{ .string = id }),
+        else => {},
+    }
     try operation_record.put(allocator, "target_ids", .{ .array = target_ids });
     try root.put(allocator, "operation", .{ .object = operation_record });
     const revision_payload = root.getPtr("revision_payload") orelse return writeFailure(io, request.request_id, "invalid_artifact", "revision_payload is required.");
@@ -436,15 +449,12 @@ fn writeMutationResult(allocator: std.mem.Allocator, io: std.Io, request: core.p
         .object => |object| object,
         else => return writeFailure(io, request.request_id, "invalid_artifact", "revision_payload must be an object."),
     };
-    const current_lifecycle = stringFromObject(payload_object, "lifecycle_state") orelse "";
-    if (request.operation != .start_review and request.operation != .complete_review and
-        (std.mem.eql(u8, current_lifecycle, "approved") or std.mem.eql(u8, current_lifecycle, "review_complete")))
-        try payload_object.put(allocator, "lifecycle_state", .{ .string = "in_review" });
-    if (request.operation == .start_review) try payload_object.put(allocator, "lifecycle_state", .{ .string = "in_review" });
-    if (request.operation == .complete_review) {
+    try normalizeItemInclusion(allocator, payload_object);
+    const next_lifecycle = core.transition.next(decoded.value.revision_payload.lifecycle_state, request.operation) catch
+        return writeFailure(io, request.request_id, "invalid_transition", "Operation is not allowed from the current lifecycle.");
+    if (request.operation == .complete_review)
         checkApprovalEligibility(payload_object) catch |err| return writeFailure(io, request.request_id, "approval_ineligible", approvalErrorMessage(err));
-        try payload_object.put(allocator, "lifecycle_state", .{ .string = "review_complete" });
-    }
+    try payload_object.put(allocator, "lifecycle_state", .{ .string = @tagName(next_lifecycle) });
     if (payload.get("item_id")) |item_id_value| {
         const item_id = switch (item_id_value) {
             .string => |value| value,
@@ -466,10 +476,17 @@ fn writeMutationResult(allocator: std.mem.Allocator, io: std.Io, request: core.p
             if (id_value == .string and std.mem.eql(u8, id_value.string, item_id)) {
                 found = true;
                 switch (request.operation) {
-                    .accept_item => try item_object.put(allocator, "review_status", .{ .string = "accepted" }),
+                    .accept_item => {
+                        try item_object.put(allocator, "review_status", .{ .string = "accepted" });
+                        try item_object.put(allocator, "included_in_approval", .{ .bool = true });
+                        try item_object.put(allocator, "rationale", .null);
+                    },
                     .reject_item => {
+                        const rationale = stringField(payload, "rationale") orelse return writeFailure(io, request.request_id, "invalid_request", "A rejection rationale is required.");
+                        if (rationale.len == 0) return writeFailure(io, request.request_id, "invalid_request", "A rejection rationale is required.");
                         try item_object.put(allocator, "review_status", .{ .string = "rejected" });
                         try item_object.put(allocator, "included_in_approval", .{ .bool = false });
+                        try item_object.put(allocator, "rationale", .{ .string = rationale });
                     },
                     .edit_item => {
                         if (payload.get("statement")) |statement| {
@@ -498,8 +515,11 @@ fn writeMutationResult(allocator: std.mem.Allocator, io: std.Io, request: core.p
                             const actor_id = actorID(payload) orelse return writeFailure(io, request.request_id, "missing_actor", "Human actor is required.");
                             const intent_id = intentID(payload_object) orelse return writeFailure(io, request.request_id, "invalid_artifact", "Intent ID is required.");
                             if (!std.mem.eql(u8, capability.value.intent_id, intent_id) or !std.mem.eql(u8, capability.value.expected_revision_id, expected_revision) or !std.mem.eql(u8, capability.value.actor_id, actor_id) or !std.mem.eql(u8, capability.value.payload_hash, token)) return writeFailure(io, request.request_id, "invalid_confirmation", "preview_token is not bound to this edit.");
+                            if (after.len == 0) return writeFailure(io, request.request_id, "invalid_request", "Edited statement must not be empty.");
                             try item_object.put(allocator, "statement", statement);
                             try item_object.put(allocator, "review_status", .{ .string = "edited" });
+                            try item_object.put(allocator, "included_in_approval", .{ .bool = true });
+                            try item_object.put(allocator, "rationale", .null);
                         }
                     },
                     else => {},
@@ -523,6 +543,8 @@ fn writeMutationResult(allocator: std.mem.Allocator, io: std.Io, request: core.p
             .string => |value| value,
             else => return writeFailure(io, request.request_id, "invalid_request", "body must be a string."),
         };
+        if (body.len == 0) return writeFailure(io, request.request_id, "invalid_request", "Comment body must not be empty.");
+        if (!payloadHasItem(payload_object, item_id)) return writeFailure(io, request.request_id, "invalid_artifact", "Comment target item was not found.");
         const actor = payload.get("actor") orelse return writeFailure(io, request.request_id, "missing_actor", "actor is required.");
         const comment_operation_id_value = payload.get("operation_id") orelse return writeFailure(io, request.request_id, "invalid_request", "operation_id is required.");
         const comment_operation_id = switch (comment_operation_id_value) {
@@ -535,7 +557,7 @@ fn writeMutationResult(allocator: std.mem.Allocator, io: std.Io, request: core.p
         try comment.put(allocator, "body", .{ .string = body });
         try comment.put(allocator, "author", actor);
         try comment.put(allocator, "status", .{ .string = "open" });
-        try comment.put(allocator, "created_revision_id", .{ .string = current_revision });
+        try comment.put(allocator, "created_revision_id", .{ .string = revision_id });
         const comments_value = payload_object.getPtr("comments") orelse return writeFailure(io, request.request_id, "invalid_artifact", "comments are required.");
         const comments = switch (comments_value.*) {
             .array => |*array| array,
@@ -544,6 +566,8 @@ fn writeMutationResult(allocator: std.mem.Allocator, io: std.Io, request: core.p
         try comments.append(.{ .object = comment });
     }
     if (request.operation == .resolve_comment or request.operation == .withdraw_comment) {
+        const reason = stringField(payload, "reason") orelse return writeFailure(io, request.request_id, "invalid_request", "A comment closure reason is required.");
+        if (reason.len == 0) return writeFailure(io, request.request_id, "invalid_request", "A comment closure reason is required.");
         const comment_id_value = payload.get("comment_id") orelse return writeFailure(io, request.request_id, "invalid_request", "comment_id is required.");
         const comment_id = switch (comment_id_value) {
             .string => |value| value,
@@ -563,8 +587,12 @@ fn writeMutationResult(allocator: std.mem.Allocator, io: std.Io, request: core.p
             const id = comment_object.get("comment_id") orelse continue;
             if (id == .string and std.mem.eql(u8, id.string, comment_id)) {
                 found_comment = true;
+                const status = stringFromObject(comment_object, "status") orelse "";
+                if (!std.mem.eql(u8, status, "open")) return writeFailure(io, request.request_id, "invalid_transition", "Only an open comment may be closed.");
                 try comment_object.put(allocator, "status", .{ .string = if (request.operation == .resolve_comment) "resolved" else "withdrawn" });
-                if (payload.get("reason")) |reason| try comment_object.put(allocator, "closure_reason", reason);
+                try comment_object.put(allocator, "closure_reason", .{ .string = reason });
+                try comment_object.put(allocator, "closed_revision_id", .{ .string = revision_id });
+                if (payload.get("resolution_revision_id")) |resolution| try comment_object.put(allocator, "resolution_revision_id", resolution);
                 comments.items[index] = .{ .object = comment_object };
             }
         }
@@ -578,8 +606,59 @@ fn writeMutationResult(allocator: std.mem.Allocator, io: std.Io, request: core.p
     try root.put(allocator, "revision_hash", .{ .string = &revision_digest });
     output.clearRetainingCapacity();
     try std.json.Stringify.value(parsed.value, .{}, &output.writer);
+    var validated = core.validation.parseRevision(allocator, output.written()) catch return writeFailure(io, request.request_id, "invalid_artifact", "Mutation would violate Intent invariants.");
+    defer validated.deinit();
     try publishMutation(allocator, io, path, revision_id, output.written(), root, held_lock != null, null);
-    try std.json.Stringify.value(.{ .protocol_version = core.protocol.protocol_version, .request_id = request.request_id, .ok = true, .result_schema = "zintent.result/1", .result = .{ .contract_version = "1.0.0", .ok = true, .operation = @tagName(request.operation), .affected_ids = &.{}, .findings = &.{}, .data = .{ .intent = parsed.value } } }, .{}, writer);
+    var data = try std.json.ObjectMap.init(allocator, &.{}, &.{});
+    try data.put(allocator, "intent", parsed.value);
+    var result = try std.json.ObjectMap.init(allocator, &.{}, &.{});
+    try result.put(allocator, "contract_version", .{ .string = "1.0.0" });
+    try result.put(allocator, "ok", .{ .bool = true });
+    try result.put(allocator, "operation", .{ .string = @tagName(request.operation) });
+    try result.put(allocator, "affected_ids", .{ .array = target_ids });
+    try result.put(allocator, "findings", .{ .array = std.json.Array.init(allocator) });
+    try result.put(allocator, "data", .{ .object = data });
+    var envelope = try std.json.ObjectMap.init(allocator, &.{}, &.{});
+    try envelope.put(allocator, "protocol_version", .{ .string = core.protocol.protocol_version });
+    try envelope.put(allocator, "request_id", .{ .string = request.request_id });
+    try envelope.put(allocator, "ok", .{ .bool = true });
+    try envelope.put(allocator, "result_schema", .{ .string = "zintent.result/1" });
+    try envelope.put(allocator, "result", .{ .object = result });
+    try std.json.Stringify.value(std.json.Value{ .object = envelope }, .{}, writer);
+}
+
+fn payloadHasItem(payload: std.json.ObjectMap, item_id: []const u8) bool {
+    const items_value = payload.get("items") orelse return false;
+    const items = switch (items_value) {
+        .array => |array| array,
+        else => return false,
+    };
+    for (items.items) |item_value| {
+        const item = switch (item_value) {
+            .object => |object| object,
+            else => continue,
+        };
+        if (stringFromObject(item, "item_id")) |id| if (std.mem.eql(u8, id, item_id)) return true;
+    }
+    return false;
+}
+
+fn normalizeItemInclusion(allocator: std.mem.Allocator, payload: std.json.ObjectMap) !void {
+    const items_value = payload.getPtr("items") orelse return;
+    const items = switch (items_value.*) {
+        .array => |*array| array,
+        else => return,
+    };
+    for (items.items, 0..) |item_value, index| {
+        var item = switch (item_value) {
+            .object => |object| object,
+            else => continue,
+        };
+        const status = stringFromObject(item, "review_status") orelse "unreviewed";
+        try item.put(allocator, "included_in_approval", .{ .bool = !std.mem.eql(u8, status, "rejected") });
+        if (!std.mem.eql(u8, status, "rejected")) try item.put(allocator, "rationale", .null);
+        items.items[index] = .{ .object = item };
+    }
 }
 
 fn setHumanProvenance(allocator: std.mem.Allocator, item: *std.json.ObjectMap, actor: std.json.Value, operation_id: []const u8, operation_type: []const u8, revision_id: []const u8) !void {
@@ -605,10 +684,11 @@ fn checkApprovalEligibility(payload: std.json.ObjectMap) !void {
     for (items.items) |item| {
         if (item != .object) continue;
         const object = item.object;
+        const status = object.get("review_status") orelse return error.UnreviewedItem;
+        if (status == .string and std.mem.eql(u8, status.string, "rejected")) continue;
         if (object.get("included_in_approval")) |included_value| if (included_value == .bool and !included_value.bool) continue;
         included += 1;
-        const status = object.get("review_status") orelse return error.UnreviewedItem;
-        if (status != .string or std.mem.eql(u8, status.string, "unreviewed")) return error.UnreviewedItem;
+        if (status != .string or (!std.mem.eql(u8, status.string, "accepted") and !std.mem.eql(u8, status.string, "edited"))) return error.UnreviewedItem;
     }
     if (included == 0) return error.NoIncludedItems;
     const comments_value = payload.get("comments") orelse return error.OpenComment;
@@ -747,6 +827,8 @@ fn writePrepareApprovalResult(allocator: std.mem.Allocator, io: std.Io, request:
     const actor_id = actorID(payload) orelse return writeFailure(io, request.request_id, "missing_actor", "Human actor is required.");
     const bytes = readIntentBytes(allocator, io, path) catch return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact could not be read.");
     defer allocator.free(bytes);
+    var validated = core.validation.parseRevision(allocator, bytes) catch return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact failed validation.");
+    defer validated.deinit();
     var parsed = std.json.parseFromSlice(std.json.Value, allocator, bytes, .{ .allocate = .alloc_always }) catch return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact is not valid JSON.");
     defer parsed.deinit();
     const root = switch (parsed.value) {
@@ -793,6 +875,9 @@ fn writeApproveResult(allocator: std.mem.Allocator, io: std.Io, request: core.pr
     const response = stringField(payload, "challenge_response") orelse return writeFailure(io, request.request_id, "invalid_confirmation", "challenge_response is required.");
     const bytes = readIntentBytes(allocator, io, path) catch return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact could not be read.");
     defer allocator.free(bytes);
+    var validated = core.validation.parseRevision(allocator, bytes) catch return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact failed validation.");
+    defer validated.deinit();
+    _ = core.transition.next(validated.value.revision_payload.lifecycle_state, .approve_intent) catch return writeFailure(io, request.request_id, "invalid_transition", "Intent must be review_complete before approval.");
     var parsed = std.json.parseFromSlice(std.json.Value, allocator, bytes, .{ .allocate = .alloc_always }) catch return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact is not valid JSON.");
     defer parsed.deinit();
     var root = switch (parsed.value) {
@@ -800,6 +885,7 @@ fn writeApproveResult(allocator: std.mem.Allocator, io: std.Io, request: core.pr
         else => return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact must be an object."),
     };
     const current = stringFromObject(root, "revision_id") orelse "";
+    const confirmed_revision_hash = stringFromObject(root, "revision_hash") orelse "";
     core.store.checkExpectedRevision(expected, current) catch return writeFailure(io, request.request_id, "stale_revision", "Expected revision does not match current revision.");
     const revision_payload = root.getPtr("revision_payload") orelse return writeFailure(io, request.request_id, "invalid_artifact", "revision_payload is required.");
     var payload_object = switch (revision_payload.*) {
@@ -820,6 +906,7 @@ fn writeApproveResult(allocator: std.mem.Allocator, io: std.Io, request: core.pr
     try root.put(allocator, "parent_revision_id", .{ .string = current });
     try root.put(allocator, "revision_id", .{ .string = operation_id });
     try root.put(allocator, "operation_id", .{ .string = operation_id });
+    if (payload.get("actor")) |actor| try root.put(allocator, "actor", actor);
     try payload_object.put(allocator, "lifecycle_state", .{ .string = "approved" });
     var operation = try std.json.ObjectMap.init(allocator, &.{}, &.{});
     try operation.put(allocator, "type", .{ .string = "approve_intent" });
@@ -832,7 +919,9 @@ fn writeApproveResult(allocator: std.mem.Allocator, io: std.Io, request: core.pr
     try root.put(allocator, "revision_hash", .{ .string = &approved_revision_hash });
     output.clearRetainingCapacity();
     try std.json.Stringify.value(parsed.value, .{}, &output.writer);
-    const snapshot_id = publishApprovedSnapshot(allocator, io, path, approved_hash, .{ .object = approved_content }, current, stringFromObject(root, "revision_hash") orelse "", &approved_revision_hash, operation_id, actor_id, token) catch return writeFailure(io, request.request_id, "persistence_failure", "Approved snapshot could not be published.");
+    var approved_revision = core.validation.parseRevision(allocator, output.written()) catch return writeFailure(io, request.request_id, "invalid_artifact", "Approval would violate Intent invariants.");
+    defer approved_revision.deinit();
+    const snapshot_id = publishApprovedSnapshot(allocator, io, path, approved_hash, .{ .object = approved_content }, current, confirmed_revision_hash, &approved_revision_hash, operation_id, actor_id, token) catch return writeFailure(io, request.request_id, "persistence_failure", "Approved snapshot could not be published.");
     defer allocator.free(snapshot_id);
     try publishMutation(allocator, io, path, operation_id, output.written(), root, false, snapshot_id);
     const snapshot_id_string: []const u8 = snapshot_id;
@@ -913,7 +1002,8 @@ fn writeIntentResult(allocator: std.mem.Allocator, io: std.Io, request: core.pro
         return writeFailure(io, request.request_id, "invalid_artifact", "Intent artifact is not valid JSON.");
     defer parsed.deinit();
     if (request.operation == .validate_intent) {
-        core.validation.validateIntent(parsed.value) catch |err| return writeValidationFailure(io, request.request_id, err);
+        var validated = core.validation.parseRevision(allocator, bytes) catch |err| return writeValidationFailure(io, request.request_id, err);
+        validated.deinit();
     }
     try std.json.Stringify.value(.{
         .protocol_version = core.protocol.protocol_version,

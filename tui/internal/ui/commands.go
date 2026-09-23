@@ -122,6 +122,7 @@ func decodeWorkspaceIntent(raw json.RawMessage, intentPath string) WorkspaceCano
 						Kind       string          `json:"kind"`
 						Statement  string          `json:"statement"`
 						Status     string          `json:"review_status"`
+						Included   bool            `json:"included_in_approval"`
 						Provenance json.RawMessage `json:"provenance"`
 						Rationale  string          `json:"rationale"`
 					} `json:"items"`
@@ -141,7 +142,7 @@ func decodeWorkspaceIntent(raw json.RawMessage, intentPath string) WorkspaceCano
 	payload := result.Data.Intent.RevisionPayload
 	items := make([]Item, 0, len(payload.Items))
 	for _, item := range payload.Items {
-		items = append(items, Item{ID: item.ID, Kind: item.Kind, Statement: item.Statement, Status: item.Status, Provenance: provenanceText(item.Provenance), Rationale: item.Rationale})
+		items = append(items, Item{ID: item.ID, Kind: item.Kind, Statement: item.Statement, Status: item.Status, Provenance: provenanceText(item.Provenance), Rationale: item.Rationale, Excluded: !item.Included})
 	}
 	comments := make([]CommentRecord, 0, len(payload.Comments))
 	for _, comment := range payload.Comments {

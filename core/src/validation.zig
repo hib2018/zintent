@@ -4,11 +4,20 @@ const model = @import("model.zig");
 pub fn validateItems(items: []const model.Item, comments: []const model.Comment) !void {
     for (items, 0..) |item, i| {
         if (item.item_id.len == 0 or item.kind.len == 0 or item.statement.len == 0) return error.InvalidItem;
-        if (item.review_status == .rejected and (item.rationale == null or item.rationale.?.len == 0)) return error.MissingRationale;
+        if (item.review_status == .rejected) {
+            if (item.rationale == null or item.rationale.?.len == 0) return error.MissingRationale;
+            if (item.included_in_approval) return error.InvalidRejection;
+        } else if (!item.included_in_approval) return error.InvalidInclusion;
+        if (item.provenance.operation_id.len == 0 or item.provenance.operation_type.len == 0 or item.provenance.revision_id.len == 0) return error.InvalidProvenance;
+        if (item.provenance.operation_actor) |actor| try actor.validate();
         for (items[i + 1 ..]) |other| if (std.mem.eql(u8, item.item_id, other.item_id)) return error.DuplicateId;
     }
     for (comments, 0..) |comment, i| {
-        if (comment.comment_id.len == 0 or comment.body.len == 0) return error.InvalidComment;
+        if (comment.comment_id.len == 0 or comment.body.len == 0 or comment.created_revision_id.len == 0) return error.InvalidComment;
+        try comment.author.validate();
+        if (comment.status == .open) {
+            if (comment.closed_revision_id != null or comment.closure_reason != null) return error.InvalidCommentClosure;
+        } else if (comment.closed_revision_id == null or comment.closed_revision_id.?.len == 0 or comment.closure_reason == null or comment.closure_reason.?.len == 0) return error.InvalidCommentClosure;
         var found = false;
         for (items) |item| if (std.mem.eql(u8, item.item_id, comment.target_item_id)) {
             found = true;
@@ -22,10 +31,9 @@ pub fn validateItems(items: []const model.Item, comments: []const model.Comment)
 pub fn approvalEligible(items: []const model.Item, comments: []const model.Comment) bool {
     var included: usize = 0;
     for (items) |item| {
-        if (!item.included_in_approval) continue;
-        if (item.review_status == .rejected) continue;
+        if (!item.included_in_approval or item.review_status == .rejected) continue;
         included += 1;
-        if (item.review_status == .unreviewed) return false;
+        if (item.review_status != .accepted and item.review_status != .edited) return false;
     }
     if (included == 0) return false;
     for (comments) |comment| if (comment.status == .open) return false;
@@ -36,9 +44,9 @@ pub fn completeReview(items: []const model.Item, comments: []const model.Comment
     if (items.len == 0) return error.NoIncludedItems;
     var included: usize = 0;
     for (items) |item| {
-        if (!item.included_in_approval) continue;
+        if (!item.included_in_approval or item.review_status == .rejected) continue;
         included += 1;
-        if (item.review_status == .unreviewed) return error.UnreviewedItem;
+        if (item.review_status != .accepted and item.review_status != .edited) return error.UnreviewedItem;
     }
     if (included == 0) return error.NoIncludedItems;
     for (comments) |comment| if (comment.status == .open) return error.OpenComment;
@@ -84,6 +92,9 @@ pub fn parseRevision(allocator: std.mem.Allocator, bytes: []const u8) !std.json.
     if (!std.mem.eql(u8, parsed.value.schema_version, "1.0.0") or
         !std.mem.eql(u8, parsed.value.hash_algorithm, "sha-256") or
         !std.mem.eql(u8, parsed.value.canonicalization, "jcs-rfc8785")) return error.UnsupportedSchema;
+    if (parsed.value.revision_id.len == 0 or parsed.value.revision_hash.len == 0 or parsed.value.operation_id.len == 0 or
+        parsed.value.operation.type.len == 0 or parsed.value.revision_payload.intent_id.len == 0) return error.InvalidIntent;
+    try parsed.value.actor.validate();
     try validateItems(parsed.value.revision_payload.items, parsed.value.revision_payload.comments);
     return parsed;
 }

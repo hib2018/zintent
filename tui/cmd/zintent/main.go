@@ -354,7 +354,7 @@ func parseArgs(args []string) (options, error) {
 		}
 		o.payload["actor"] = actor
 	}
-	for source, target := range map[string]string{"statement_file": "statement", "reason_file": "rationale", "body_file": "body"} {
+	for source, target := range map[string]string{"statement_file": "statement", "body_file": "body"} {
 		if value, ok := o.payload[source]; ok {
 			path, ok := value.(string)
 			if !ok {
@@ -367,6 +367,22 @@ func parseArgs(args []string) (options, error) {
 			o.payload[target] = string(contents)
 			delete(o.payload, source)
 		}
+	}
+	if value, ok := o.payload["reason_file"]; ok {
+		path, ok := value.(string)
+		if !ok {
+			return o, errors.New("reason_file must be a path")
+		}
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			return o, fmt.Errorf("read reason_file: %w", err)
+		}
+		target := "rationale"
+		if o.operation == "resolve_comment" || o.operation == "withdraw_comment" {
+			target = "reason"
+		}
+		o.payload[target] = string(contents)
+		delete(o.payload, "reason_file")
 	}
 	o.payload["operation"] = o.operation
 	return o, nil

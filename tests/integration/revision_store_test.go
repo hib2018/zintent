@@ -59,7 +59,8 @@ func TestDirectoryMutationPublishesVerifiedHEADAndIdenticalRetry(t *testing.T) {
 		return out.Bytes()
 	}
 	item := draft.Payload.Items[0].ID
-	args := []string{"item", "accept", dir, item, "--expected-revision", draft.RevisionID, "--operation-id", "directory-op", "--actor-id", "alice", "--core", core, "--output", "json"}
+	run("start-review", dir, "--expected-revision", draft.RevisionID, "--operation-id", "directory-start", "--actor-id", "alice", "--core", core)
+	args := []string{"item", "accept", dir, item, "--expected-revision", "directory-start", "--operation-id", "directory-op", "--actor-id", "alice", "--core", core, "--output", "json"}
 	run(args...)
 	run(args...)
 	var result struct {

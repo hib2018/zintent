@@ -117,6 +117,28 @@ func TestCompleteBlocksRepeatedCommandsWhileInFlight(t *testing.T) {
 	}
 }
 
+func TestDraftRequiresExplicitReviewStart(t *testing.T) {
+	executor := &recordingExecutor{}
+	m := New([]Item{{ID: "i1"}})
+	m.Lifecycle = "draft"
+	m.Executor = executor
+	next, cmd := m.Update(tea.KeyPressMsg(tea.Key{Text: "a", Code: 'a'}))
+	if cmd != nil || next.(Model).Modal != "" {
+		t.Fatal("draft item action must not dispatch")
+	}
+	next, cmd = next.(Model).Update(tea.KeyPressMsg(tea.Key{Text: "r", Code: 'r'}))
+	if cmd == nil || executor.operation != "start_review" || next.(Model).Modal != "submitting" {
+		t.Fatalf("review start was not dispatched: %#v", next)
+	}
+}
+
+func TestNoIncludedItemIsACompletionBlocker(t *testing.T) {
+	m := New([]Item{{ID: "i1", Status: "rejected", Excluded: true}})
+	if got := m.ResumeBlockers(); len(got) != 1 || got[0] != "no items included in approval" {
+		t.Fatalf("unexpected blockers: %#v", got)
+	}
+}
+
 func TestConfirmedAcceptDispatchesThroughExecutor(t *testing.T) {
 	m := New([]Item{{ID: "i1"}})
 	m.Executor = fakeExecutor{}
@@ -128,6 +150,13 @@ func TestConfirmedAcceptDispatchesThroughExecutor(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("confirmed action must dispatch")
 	}
+}
+
+type recordingExecutor struct{ operation string }
+
+func (e *recordingExecutor) Execute(operation, _ string, _ map[string]any) tea.Cmd {
+	e.operation = operation
+	return func() tea.Msg { return nil }
 }
 
 type countingExecutor struct{ count int }

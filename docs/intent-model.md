@@ -19,7 +19,7 @@ review status、rationale、source referenceを持ちます。
 | `edited` | 人間が編集済み |
 | `rejected` | 理由付きで承認対象外 |
 
-rejectされたItemも履歴から削除しません。再導入時は元Itemをsupersedeする新Itemを作ります。
+rejectされたItemも履歴から削除しません。同じItemを後からacceptまたはeditするとrejectを取り消し、承認対象へ戻してreject理由をクリアします。
 
 ### Comment
 

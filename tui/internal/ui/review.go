@@ -10,6 +10,7 @@ import (
 type Item struct {
 	ID, Kind, Statement, Status string
 	Provenance, Rationale       string
+	Excluded                    bool
 }
 
 type ReviewScreen struct {
@@ -87,15 +88,23 @@ type Model struct {
 	RevisionHash, ApprovedContentHash, SnapshotPath              string
 }
 
-func New(items []Item) Model { return Model{Items: items, Lifecycle: "draft"} }
+func New(items []Item) Model { return Model{Items: items, Lifecycle: "in_review"} }
 
 // ResumeBlockers reports the actionable work still preventing completion.
 func (m Model) ResumeBlockers() []string {
 	blockers := make([]string, 0)
+	included := 0
 	for _, item := range m.Items {
-		if item.Status == "unreviewed" || item.Status == "" {
+		if item.Status == "rejected" || item.Excluded {
+			continue
+		}
+		included++
+		if item.Status != "accepted" && item.Status != "edited" {
 			blockers = append(blockers, "unreviewed item: "+item.ID)
 		}
+	}
+	if included == 0 {
+		blockers = append(blockers, "no items included in approval")
 	}
 	for _, comment := range m.Comments {
 		if comment.Status == "open" {
@@ -145,7 +154,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.Selected > 0 {
 				m.Selected--
 			}
+		case "r":
+			if m.Lifecycle == "draft" && m.Executor != nil {
+				m.Status = "starting review"
+				m.Modal, m.PendingAction = "submitting", "start-review"
+				return m, m.Executor.Execute("start_review", "", nil)
+			}
+			m.Status = "review is already started"
 		case "a", "e", "c", "x":
+			if m.Lifecycle == "draft" {
+				m.Status = "press r to start review first"
+				break
+			}
 			if len(m.Items) > 0 {
 				m.PendingAction = map[string]string{"a": "accept", "e": "edit-preview", "c": "comment", "x": "reject"}[msg.String()]
 				m.Modal = m.PendingAction
@@ -155,6 +175,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case "f":
+			if m.Lifecycle == "draft" {
+				m.Status = "press r to start review first"
+				break
+			}
 			if m.Lifecycle == "review_complete" || m.Lifecycle == "approved" {
 				m.Status = "review is already complete; press p to approve"
 				break
@@ -271,6 +295,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							Kind      string `json:"kind"`
 							Statement string `json:"statement"`
 							Status    string `json:"review_status"`
+							Included  bool   `json:"included_in_approval"`
 						} `json:"items"`
 						Comments []struct {
 							ID           string `json:"comment_id"`
@@ -294,7 +319,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Items = make([]Item, 0, len(result.Data.Intent.Payload.Items))
 		m.Selected = 0
 		for _, item := range result.Data.Intent.Payload.Items {
-			m.Items = append(m.Items, Item{ID: item.ID, Kind: item.Kind, Statement: item.Statement, Status: item.Status})
+			m.Items = append(m.Items, Item{ID: item.ID, Kind: item.Kind, Statement: item.Statement, Status: item.Status, Excluded: !item.Included})
 			if item.ID == selectedID {
 				m.Selected = len(m.Items) - 1
 			}
