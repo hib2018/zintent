@@ -40,7 +40,7 @@ func TestSnapshotLinkageAndRecoverySafety(t *testing.T) {
 }
 
 func TestAuditScreenGoldens(t *testing.T) {
-	screens := map[string]string{"history": (HistoryScreen{Revisions: []RevisionRecord{{ID: "r1", ActorID: "alice"}}}).View(), "validation": (ValidationScreen{Findings: []ValidationFinding{{Code: "open", Severity: "blocking", Message: "full"}}}).View(), "snapshot": (SnapshotScreen{SnapshotID: "s", ApprovalID: "a", Verified: true}).View(), "recovery": (RecoveryScreen{RevisionID: "r1", HeadHash: "hash"}).View()}
+	screens := map[string]string{"history": (HistoryScreen{Revisions: []RevisionRecord{{ID: "r2", ParentID: "r1", OperationType: "reject_item", ActorID: "alice", CreatedAt: "now", Lifecycle: "in_review"}}}).View(), "validation": (ValidationScreen{Findings: []ValidationFinding{{Code: "open", Severity: "blocking", Message: "full"}}}).View(), "snapshot": (SnapshotScreen{SnapshotID: "s", ApprovalID: "a", Verified: true}).View(), "recovery": (RecoveryScreen{RevisionID: "r1", HeadHash: "hash"}).View()}
 	for name, view := range screens {
 		golden, err := os.ReadFile("testdata/audit-" + name + ".golden")
 		if err != nil {

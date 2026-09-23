@@ -54,29 +54,30 @@ type ItemChange struct{ ItemID, Kind, Before, After, Provenance string }
 
 func (s HistoryScreen) View() string {
 	var b strings.Builder
-	b.WriteString("Verified history\n")
+	b.WriteString("HISTORY [verified]\n")
 	for index, r := range s.Revisions {
-		line := fmt.Sprintf("  %s <- %s  %s  actor:%s  %s", shortRef(r.ID), shortRef(r.ParentID), r.OperationType, r.ActorID, r.CreatedAt)
+		top := fmt.Sprintf("  [%s] [%s] %s", fallback(r.Lifecycle, "-"), fallback(r.OperationType, "-"), shortRef(r.ID))
 		if index == s.Selected {
-			line = highlightTopLine("→ " + strings.TrimPrefix(line, "  "))
+			top = highlightTopLine("→ " + strings.TrimPrefix(top, "  "))
 		}
-		b.WriteString(line + "\n")
+		b.WriteString(top + "\n")
+		fmt.Fprintf(&b, "    parent:%s  actor:%s  time:%s\n", shortRef(fallback(r.ParentID, "-")), fallback(r.ActorID, "-"), fallback(r.CreatedAt, "-"))
 	}
 	if len(s.Orphans) > 0 {
-		b.WriteString("Orphans (not canonical)\n")
+		b.WriteString("ORPHANS [not canonical]\n")
 		for _, r := range s.Orphans {
-			b.WriteString(r.ID + "\n")
+			fmt.Fprintf(&b, "  [orphan] %s\n", shortRef(r.ID))
 		}
 	}
 	if s.BaseID != "" || s.TargetID != "" {
-		fmt.Fprintf(&b, "Diff %s → %s\n", s.BaseID, s.TargetID)
+		fmt.Fprintf(&b, "DIFF [%s → %s]\n", shortRef(s.BaseID), shortRef(s.TargetID))
 		for _, c := range s.Changes {
-			fmt.Fprintf(&b, "%s [%s]\n- %s\n+ %s\nprovenance: %s\n", c.ItemID, c.Kind, c.Before, c.After, c.Provenance)
+			fmt.Fprintf(&b, "[%s] %s\n- %s\n+ %s\nprovenance: %s\n", c.Kind, c.ItemID, c.Before, c.After, c.Provenance)
 		}
 	}
 	if s.Inspected != nil {
 		r := s.Inspected
-		fmt.Fprintf(&b, "\nVERIFIED REVISION\n  ID        : %s\n  Hash      : %s\n  Parent    : %s\n  Operation : %s\n  Actor     : %s\n  Lifecycle : %s\n", r.ID, r.Hash, r.ParentID, r.OperationType, r.ActorID, r.Lifecycle)
+		fmt.Fprintf(&b, "\nREVISION [verified]\n  ID        : %s\n  Hash      : %s\n  Parent    : %s\n  Operation : [%s]\n  Actor     : %s\n  Lifecycle : [%s]\n", r.ID, r.Hash, fallback(r.ParentID, "-"), fallback(r.OperationType, "-"), fallback(r.ActorID, "-"), fallback(r.Lifecycle, "-"))
 	}
 	if len(s.Revisions) > 0 && s.BaseID == "" && s.TargetID == "" {
 		b.WriteString("\nj/k select  Enter inspect  d diff with parent  Esc back")
