@@ -17,6 +17,15 @@ func TestHistoryDiffAndProvenance(t *testing.T) {
 		t.Fatal()
 	}
 }
+func TestHistoryScrollsSelectedRevisionIntoView(t *testing.T) {
+	s := HistoryScreen{Height: 7, Revisions: []RevisionRecord{{ID: "r1"}, {ID: "r2"}, {ID: "r3"}, {ID: "r4"}}}
+	s.Move(3)
+	view := s.View()
+	if !strings.Contains(view, "[4/4]") || !strings.Contains(view, "r4") || strings.Contains(view, "r1") {
+		t.Fatalf("selected revision is not visible: %s", view)
+	}
+}
+
 func TestValidationFiltersAndJumps(t *testing.T) {
 	s := ValidationScreen{Severity: "blocking", SelectedID: "i1", Findings: []ValidationFinding{{Code: "open", Severity: "blocking", RecordID: "i1", Message: "full message"}, {Code: "warn", Severity: "warning"}}}
 	if len(s.Visible()) != 1 || s.JumpRecord() != "i1" {

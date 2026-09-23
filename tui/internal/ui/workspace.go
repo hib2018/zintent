@@ -715,7 +715,6 @@ func (m WorkspaceModel) View() tea.View {
 		height = 24
 	}
 	header := fmt.Sprintf("ZINTENT WORKSPACE  %-10s  intent:%-19s  revision:%s", strings.ToUpper(m.Screen().String()), shortRef(fallback(m.IntentID, "-")), shortRef(fallback(m.Revision, "-")))
-	main := m.screenBody()
 	bodyHeight := max(8, height-9)
 	mainTitle := "Main: " + m.Screen().String()
 	intentList := m.IntentList
@@ -724,13 +723,15 @@ func (m WorkspaceModel) View() tea.View {
 		intentPaneHeight := max(4, bodyHeight/3)
 		mainPaneHeight := max(4, bodyHeight-intentPaneHeight-1)
 		intentList.Height = intentPaneHeight - 2
+		m.History.Height = mainPaneHeight - 2
 		body = strings.Join(renderPane("Intents", intentList.View(), width, intentPaneHeight, m.Screen() == ScreenIntentList), "\n") + "\n" +
-			strings.Join(renderPane(mainTitle, main, width, mainPaneHeight, m.Screen() != ScreenIntentList), "\n")
+			strings.Join(renderPane(mainTitle, m.screenBody(), width, mainPaneHeight, m.Screen() != ScreenIntentList), "\n")
 	} else {
 		left := max(24, width/4)
 		right := width - left - 1
 		intentList.Height = bodyHeight - 2
-		body = joinPanes(renderPane("Intents", intentList.View(), left, bodyHeight, m.Screen() == ScreenIntentList), renderPane(mainTitle, main, right, bodyHeight, m.Screen() != ScreenIntentList))
+		m.History.Height = bodyHeight - 2
+		body = joinPanes(renderPane("Intents", intentList.View(), left, bodyHeight, m.Screen() == ScreenIntentList), renderPane(mainTitle, m.screenBody(), right, bodyHeight, m.Screen() != ScreenIntentList))
 	}
 	status := fallback(m.Status, "Ready")
 	var b strings.Builder
