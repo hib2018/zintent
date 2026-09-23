@@ -3,7 +3,7 @@ const std = @import("std");
 pub const Id = []const u8;
 pub const Timestamp = []const u8;
 
-pub const Lifecycle = enum { draft, in_review, review_complete, approved };
+pub const Lifecycle = enum { draft, in_review, review_complete, approved, rejected };
 pub const ReviewStatus = enum { unreviewed, accepted, edited, rejected };
 pub const CommentStatus = enum { open, resolved, withdrawn };
 pub const ContentOrigin = enum { source, human, ai, system };

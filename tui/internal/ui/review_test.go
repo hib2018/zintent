@@ -132,10 +132,26 @@ func TestDraftRequiresExplicitReviewStart(t *testing.T) {
 	}
 }
 
-func TestNoIncludedItemIsACompletionBlocker(t *testing.T) {
+func TestAllRejectedItemsCanCompleteAsRejected(t *testing.T) {
 	m := New([]Item{{ID: "i1", Status: "rejected", Excluded: true}})
-	if got := m.ResumeBlockers(); len(got) != 1 || got[0] != "no items included in approval" {
+	if got := m.ResumeBlockers(); len(got) != 0 {
 		t.Fatalf("unexpected blockers: %#v", got)
+	}
+	if !((CompletionScreen{RevisionID: "r1", Lifecycle: "in_review", Blockers: m.ResumeBlockers()}).Eligible()) {
+		t.Fatal("all-rejected review should be completable")
+	}
+}
+
+func TestRejectedIntentOnlyAllowsAcceptOrEditToReopen(t *testing.T) {
+	m := New([]Item{{ID: "i1", Status: "rejected", Excluded: true}})
+	m.Lifecycle = "rejected"
+	next, _ := m.Update(tea.KeyPressMsg(tea.Key{Text: "c", Code: 'c'}))
+	if next.(Model).Modal != "" {
+		t.Fatal("comment must not reopen a rejected Intent")
+	}
+	next, _ = next.(Model).Update(tea.KeyPressMsg(tea.Key{Text: "a", Code: 'a'}))
+	if next.(Model).Modal != "accept" {
+		t.Fatal("accept should be available to reopen a rejected Intent")
 	}
 }
 

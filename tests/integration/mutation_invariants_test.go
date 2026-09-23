@@ -110,11 +110,16 @@ func TestCoreEnforcesMutationInvariantsAndReversibleRejection(t *testing.T) {
 		t.Fatalf("affected item was not reported: %+v", rejected.Result.AffectedIDs)
 	}
 
-	p = mutation("reject", "restore")
+	rejectedIntent := request("complete_review", mutation("reject", "reject-complete"))
+	if !rejectedIntent.OK || rejectedIntent.Result.Data.Intent.Payload.Lifecycle != "rejected" {
+		t.Fatalf("all-rejected review did not close as rejected: %+v", rejectedIntent)
+	}
+
+	p = mutation("reject-complete", "restore")
 	p["item_id"] = itemID
 	restored := request("accept_item", p)
 	item = restored.Result.Data.Intent.Payload.Items[0]
-	if !restored.OK || item.Status != "accepted" || !item.Included || item.Rationale != nil {
+	if !restored.OK || restored.Result.Data.Intent.Payload.Lifecycle != "in_review" || item.Status != "accepted" || !item.Included || item.Rationale != nil {
 		t.Fatalf("rejection was not reversed: %+v", restored)
 	}
 

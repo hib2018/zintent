@@ -17,7 +17,7 @@ Intent review walking skeletonの仕様を作成して"
 - Q: 項目を reject した後、そのIntent全体はどの条件で承認可能にしますか？ → A: Rejectした項目を理由付きで承認対象から除外する
 - Q: Feature 001 では、open commentをどの操作で承認可能な状態へ解消しますか？ → A: 人間がresolveまたはwithdrawを明示する
 - Q: 認証機能を持たないFeature 001で、承認者や編集者のactor identityをどのように記録しますか？ → A: OSユーザー名を自動取得する
-- Q: Intent Documentのライフサイクル状態を、どの状態遷移として明示しますか？ → A: draft → in_review → review_complete → approved
+- Q: Intent Documentのライフサイクル状態を、どの状態遷移として明示しますか？ → A: draft → in_review → review_complete → approved、または全Itemをrejectしてin_review → rejected
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -194,12 +194,14 @@ continue without reconstructing prior context.
 - **FR-020**: Review actions performed through any interface included in this feature MUST use the
   same validation, transition, provenance, and revision rules.
 - **FR-022**: Intent Documents MUST use the explicit lifecycle states `draft`, `in_review`,
-  `review_complete`, and `approved`. Starting review moves `draft` to `in_review`. An explicit
-  review-completion operation moves `in_review` to `review_complete` only after all non-rejected
-  items are accepted or human-edited and no comments remain open. Approval moves only an eligible
-  `review_complete` revision to a new `approved` child revision after human confirmation. Any
-  permitted content or review change from `review_complete` or `approved` creates a new working
-  revision in `in_review`; an issued snapshot never changes state.
+  `review_complete`, `approved`, and `rejected`. Starting review moves `draft` to `in_review`. An
+  explicit review-completion operation moves `in_review` to `review_complete` when all included
+  items are accepted or human-edited, or to `rejected` when every Item is rejected; either outcome
+  requires no open comments. Approval moves only an eligible `review_complete` revision to a new
+  `approved` child revision after human confirmation. Accepting or editing an Item in a `rejected`
+  Intent creates a new working revision in `in_review`. Any permitted content or review change from
+  `review_complete` or `approved` also creates a new working revision in `in_review`; an issued
+  snapshot never changes state.
 
 ### Scope Boundaries
 
@@ -215,7 +217,7 @@ continue without reconstructing prior context.
 ### Key Entities *(include if feature involves data)*
 
 - **Intent Document**: The working review artifact, identified by an Intent ID and schema version;
-  contains one of the lifecycle states `draft`, `in_review`, `review_complete`, or `approved`, plus
+  contains one of the lifecycle states `draft`, `in_review`, `review_complete`, `approved`, or `rejected`, plus
   its current revision, source references, items, comments, and approval references.
 - **Intent Item**: A stable, individually reviewable statement with an item ID, kind, statement,
   provenance, resolution status, rationale, source reference, review status, approval-inclusion

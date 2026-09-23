@@ -32,7 +32,7 @@ only replaced durable workflow artifact.
 | intent_id | UUID v7 | Must match directory and referenced revision |
 | current_revision_id | UUID v7 | Must resolve under `revisions/` |
 | current_revision_hash | SHA-256 hex | Must match the referenced revision |
-| lifecycle_state | enum | `draft`, `in_review`, `review_complete`, or `approved` |
+| lifecycle_state | enum | `draft`, `in_review`, `review_complete`, `approved`, or `rejected` |
 | approved_snapshot_ref | string or null | Required only in `approved` |
 
 Readers verify the referenced artifact, hash, and state. A mismatch is an integrity failure.
@@ -167,6 +167,8 @@ the approved-content hash. Approval metadata is outside that hash projection to 
 | draft | start review | Valid Draft and available human actor | in_review |
 | in_review | review mutation | Expected revision matches and command validates | in_review |
 | in_review | complete review | Included items reviewed; no open comments | review_complete |
+| in_review | complete review | Every Item rejected; no open comments | rejected |
+| rejected | accept or edit Item | Valid mutation restores approval inclusion | in_review |
 | review_complete | approve | Eligibility and one-use TTY challenge rechecked; creates child revision | approved |
 | review_complete | review mutation | Valid mutation | in_review |
 | approved | normal review mutation | Valid mutation creates working revision | in_review |

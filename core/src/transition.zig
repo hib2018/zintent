@@ -76,6 +76,10 @@ pub fn next(current: model.Lifecycle, operation: model.Operation) !model.Lifecyc
             .accept_item, .edit_item, .reject_item, .add_comment, .resolve_comment, .withdraw_comment => .in_review,
             else => error.InvalidTransition,
         },
+        .rejected => switch (operation) {
+            .accept_item, .edit_item => .in_review,
+            else => error.InvalidTransition,
+        },
     };
 }
 
@@ -83,6 +87,8 @@ test "lifecycle transitions" {
     try std.testing.expectEqual(model.Lifecycle.in_review, try next(.draft, .start_review));
     try std.testing.expectEqual(model.Lifecycle.approved, try next(.review_complete, .approve_intent));
     try std.testing.expectEqual(model.Lifecycle.in_review, try next(.approved, .edit_item));
+    try std.testing.expectEqual(model.Lifecycle.in_review, try next(.rejected, .accept_item));
+    try std.testing.expectError(error.InvalidTransition, next(.rejected, .approve_intent));
     try std.testing.expectError(error.InvalidTransition, next(.draft, .approve_intent));
 }
 

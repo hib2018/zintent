@@ -56,12 +56,12 @@ Skillは工程を案内し、永続化・検証・状態遷移・承認判定は
 Draft
   ↓ review
 in_review
-  ↓ complete_review
-review_complete
-  ↓ human TTY approval
-approved + immutable snapshot
-  ↓ normal change
-in_review（snapshotは不変）
+  ├─ accepted/edited content → complete_review → review_complete → human TTY approval → approved + immutable snapshot
+  └─ all Items rejected     → complete_review → rejected
+
+approved / rejected
+  ↓ accept or edit
+in_review（issued snapshotは不変）
 ```
 
 各状態はrevisionとして保存され、HEADは現在revisionとhashを指します。承認済みsnapshotはcontent-addressedで、後から上書きできません。

@@ -23,7 +23,7 @@ func (s CompletionScreen) View() string {
 	var b strings.Builder
 	b.WriteString("COMPLETION\n")
 	b.WriteString("  Revision : " + shortRef(s.RevisionID) + "\n")
-	if s.Lifecycle == "review_complete" || s.Lifecycle == "approved" {
+	if s.Lifecycle == "review_complete" || s.Lifecycle == "approved" || s.Lifecycle == "rejected" {
 		b.WriteString("  Status   : already complete (" + s.Lifecycle + ")\n")
 		return b.String()
 	}
@@ -44,7 +44,7 @@ func (s CompletionScreen) View() string {
 }
 
 func (s CompletionScreen) Eligible() bool {
-	return len(s.Blockers) == 0 && s.RevisionID != "" && s.Lifecycle != "review_complete" && s.Lifecycle != "approved"
+	return len(s.Blockers) == 0 && s.RevisionID != "" && s.Lifecycle != "review_complete" && s.Lifecycle != "approved" && s.Lifecycle != "rejected"
 }
 func (s CompletionScreen) SelectedBlocker() string {
 	if s.Selected < 0 || s.Selected >= len(s.Blockers) {

@@ -53,7 +53,9 @@ OSユーザー名はローカル監査用で、認証済みidentityではあり�
 |---|---|---|
 | `draft` | start review | `in_review` |
 | `in_review` | review mutation | `in_review` |
-| `in_review` | complete review | `review_complete` |
+| `in_review` | complete review（承認対象あり） | `review_complete` |
+| `in_review` | complete review（全Itemがreject済み） | `rejected` |
+| `rejected` | Itemをaccept/edit | 新しい`in_review` child |
 | `review_complete` | approve | 新しい`approved` child |
 | `review_complete` / `approved` | review mutation | 新しい`in_review` child |
 

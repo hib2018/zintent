@@ -450,10 +450,10 @@ fn writeMutationResult(allocator: std.mem.Allocator, io: std.Io, request: core.p
         else => return writeFailure(io, request.request_id, "invalid_artifact", "revision_payload must be an object."),
     };
     try normalizeItemInclusion(allocator, payload_object);
-    const next_lifecycle = core.transition.next(decoded.value.revision_payload.lifecycle_state, request.operation) catch
+    var next_lifecycle = core.transition.next(decoded.value.revision_payload.lifecycle_state, request.operation) catch
         return writeFailure(io, request.request_id, "invalid_transition", "Operation is not allowed from the current lifecycle.");
     if (request.operation == .complete_review)
-        checkApprovalEligibility(payload_object) catch |err| return writeFailure(io, request.request_id, "approval_ineligible", approvalErrorMessage(err));
+        next_lifecycle = reviewCompletionLifecycle(payload_object) catch |err| return writeFailure(io, request.request_id, "approval_ineligible", approvalErrorMessage(err));
     try payload_object.put(allocator, "lifecycle_state", .{ .string = @tagName(next_lifecycle) });
     if (payload.get("item_id")) |item_id_value| {
         const item_id = switch (item_id_value) {
@@ -672,6 +672,41 @@ fn setHumanProvenance(allocator: std.mem.Allocator, item: *std.json.ObjectMap, a
     try provenance.put(allocator, "operation_type", .{ .string = operation_type });
     try provenance.put(allocator, "revision_id", .{ .string = revision_id });
     try item.put(allocator, "provenance", .{ .object = provenance });
+}
+
+fn reviewCompletionLifecycle(payload: std.json.ObjectMap) !core.model.Lifecycle {
+    const items_value = payload.get("items") orelse return error.NoIncludedItems;
+    const items = switch (items_value) {
+        .array => |value| value,
+        else => return error.NoIncludedItems,
+    };
+    if (items.items.len == 0) return error.NoIncludedItems;
+    var included: usize = 0;
+    var rejected: usize = 0;
+    for (items.items) |item| {
+        if (item != .object) return error.UnreviewedItem;
+        const object = item.object;
+        const status = object.get("review_status") orelse return error.UnreviewedItem;
+        if (status == .string and std.mem.eql(u8, status.string, "rejected")) {
+            rejected += 1;
+            continue;
+        }
+        if (object.get("included_in_approval")) |value| if (value == .bool and !value.bool) continue;
+        included += 1;
+        if (status != .string or (!std.mem.eql(u8, status.string, "accepted") and !std.mem.eql(u8, status.string, "edited"))) return error.UnreviewedItem;
+    }
+    if (included == 0 and rejected != items.items.len) return error.NoIncludedItems;
+    const comments_value = payload.get("comments") orelse return error.OpenComment;
+    const comments = switch (comments_value) {
+        .array => |value| value,
+        else => return error.OpenComment,
+    };
+    for (comments.items) |comment| {
+        if (comment != .object) return error.OpenComment;
+        const status = comment.object.get("status") orelse return error.OpenComment;
+        if (status == .string and std.mem.eql(u8, status.string, "open")) return error.OpenComment;
+    }
+    return if (rejected == items.items.len) .rejected else .review_complete;
 }
 
 fn checkApprovalEligibility(payload: std.json.ObjectMap) !void {

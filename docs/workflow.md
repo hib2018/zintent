@@ -46,13 +46,12 @@ open commentは承認をblockします。内容を編集しても自動では閉
 
 ## Review completion
 
-次を満たす場合だけ`review_complete`へ進めます。
+open commentがなくArtifactとprovenanceが有効な状態でReviewを完了すると、結果に応じて遷移します。
 
-- rejectされていないItemが一つ以上ある
-- 対象Itemがすべてacceptedまたはhuman-edited
-- reject Item上も含めopen commentがない
-- Artifactとprovenanceが有効
+- 承認対象Itemが一つ以上あり、すべてacceptedまたはhuman-edited: `review_complete`
+- 全Itemがreject済み: `rejected`
 
+`rejected` Intentは承認できません。同じItemをacceptまたはeditすると`in_review`へ戻ります。
 不足があれば、対象record IDを持つmachine-readable findingを返します。
 
 ## Approval

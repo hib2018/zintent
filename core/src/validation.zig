@@ -43,12 +43,17 @@ pub fn approvalEligible(items: []const model.Item, comments: []const model.Comme
 pub fn completeReview(items: []const model.Item, comments: []const model.Comment) !void {
     if (items.len == 0) return error.NoIncludedItems;
     var included: usize = 0;
+    var rejected: usize = 0;
     for (items) |item| {
-        if (!item.included_in_approval or item.review_status == .rejected) continue;
+        if (item.review_status == .rejected) {
+            rejected += 1;
+            continue;
+        }
+        if (!item.included_in_approval) continue;
         included += 1;
         if (item.review_status != .accepted and item.review_status != .edited) return error.UnreviewedItem;
     }
-    if (included == 0) return error.NoIncludedItems;
+    if (included == 0 and rejected != items.len) return error.NoIncludedItems;
     for (comments) |comment| if (comment.status == .open) return error.OpenComment;
 }
 
@@ -96,6 +101,11 @@ pub fn parseRevision(allocator: std.mem.Allocator, bytes: []const u8) !std.json.
         parsed.value.operation.type.len == 0 or parsed.value.revision_payload.intent_id.len == 0) return error.InvalidIntent;
     try parsed.value.actor.validate();
     try validateItems(parsed.value.revision_payload.items, parsed.value.revision_payload.comments);
+    if (parsed.value.revision_payload.lifecycle_state == .rejected) {
+        if (parsed.value.revision_payload.items.len == 0) return error.InvalidLifecycle;
+        for (parsed.value.revision_payload.items) |item| if (item.review_status != .rejected) return error.InvalidLifecycle;
+        for (parsed.value.revision_payload.comments) |comment| if (comment.status == .open) return error.InvalidLifecycle;
+    }
     return parsed;
 }
 
@@ -131,4 +141,9 @@ test "review completion blocks unreviewed items and open comments" {
     try std.testing.expectError(error.OpenComment, completeReview(&items, &comments));
     comments[0].status = .resolved;
     try completeReview(&items, &comments);
+    items[0].review_status = .rejected;
+    items[0].included_in_approval = false;
+    items[0].rationale = "not applicable";
+    try completeReview(&items, &.{});
+    try std.testing.expect(!approvalEligible(&items, &.{}));
 }

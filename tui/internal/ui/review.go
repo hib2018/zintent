@@ -93,9 +93,13 @@ func New(items []Item) Model { return Model{Items: items, Lifecycle: "in_review"
 // ResumeBlockers reports the actionable work still preventing completion.
 func (m Model) ResumeBlockers() []string {
 	blockers := make([]string, 0)
-	included := 0
+	included, rejected := 0, 0
 	for _, item := range m.Items {
-		if item.Status == "rejected" || item.Excluded {
+		if item.Status == "rejected" {
+			rejected++
+			continue
+		}
+		if item.Excluded {
 			continue
 		}
 		included++
@@ -103,7 +107,7 @@ func (m Model) ResumeBlockers() []string {
 			blockers = append(blockers, "unreviewed item: "+item.ID)
 		}
 	}
-	if included == 0 {
+	if included == 0 && (len(m.Items) == 0 || rejected != len(m.Items)) {
 		blockers = append(blockers, "no items included in approval")
 	}
 	for _, comment := range m.Comments {
@@ -166,6 +170,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.Status = "press r to start review first"
 				break
 			}
+			if m.Lifecycle == "rejected" && msg.String() != "a" && msg.String() != "e" {
+				m.Status = "accept or edit an item to reopen this Intent"
+				break
+			}
 			if len(m.Items) > 0 {
 				m.PendingAction = map[string]string{"a": "accept", "e": "edit-preview", "c": "comment", "x": "reject"}[msg.String()]
 				m.Modal = m.PendingAction
@@ -175,6 +183,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case "f":
+			if m.Lifecycle == "rejected" {
+				m.Status = "Intent is already rejected; accept or edit an item to reopen"
+				break
+			}
 			if m.Lifecycle == "draft" {
 				m.Status = "press r to start review first"
 				break
